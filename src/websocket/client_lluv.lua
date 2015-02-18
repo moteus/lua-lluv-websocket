@@ -4,6 +4,9 @@ local handshake = require 'websocket.handshake'
 local websocket = require 'websocket'
 local uv        = require 'lluv'
 local ut        = require 'lluv.utils'
+local ok, ssl   = pcall(require, 'lluv.ssl')
+if not ok then ssl = nil end
+
 local tconcat   = table.concat
 local tappend   = function(t, v) t[#t + 1] = v return t end
 local ocall     = function (f, ...) if f then return f(...) end end
@@ -83,9 +86,17 @@ function Client:connect(url, proto)
   end
 
   local protocol, host, port, uri = tools.parse_url(url)
-  if protocol ~= 'ws' then
+  if protocol ~= 'ws' and protocol ~= 'wss'  then
     return on_error(self, 'bad protocol - ' .. protocol)
   end
+
+  if protocol == 'wss' and not ssl then
+    return on_error(self, 'unsuported protocol - ' .. protocol)
+  end
+
+  if port == '' then port = nil end
+  if protocol == 'wss' then port = port or 443
+  else port = port or 80 end
 
   self._state = 'CONNECTING'
 
@@ -107,7 +118,14 @@ function Client:connect(url, proto)
       return on_error(self, "can not resolve: " .. host)
     end
 
-    self._sock = uv.tcp():connect(addr.address, port, function(sock, err)
+    if protocol == 'wss' then
+      self._ssl_ctx = self._ssl_ctx or assert(ssl.context(self._ws.ssl))
+      self._sock = self._ssl_ctx:client()
+    else
+      self._sock = uv.tcp()
+    end
+
+    self._sock:connect(addr.address, port, function(sock, err)
       if self._state ~= 'CONNECTING' then return end
 
       if err then
