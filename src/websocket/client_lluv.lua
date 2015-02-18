@@ -91,15 +91,23 @@ function Client:connect(url, proto)
 
   local key, req
 
-  self._sock = uv.tcp():connect(host, port, function(sock, err)
-    if self._state ~= 'CONNECTING' then return end
-
+  uv.getaddrinfo(host, port, {
+    family   = "inet";
+    socktype = "stream";
+    protocol = "tcp";
+  }, function(_, err, res)
     if err then
       self._state = 'CLOSED'
       return on_error(self, err)
     end
+    
+    local addr = res[1]
+    if not addr then
+      self._state = 'CLOSED'
+      return on_error(self, "can not resolve: " .. host)
+    end
 
-    sock:write(req, function(sock, err)
+    self._sock = uv.tcp():connect(addr.address, port, function(sock, err)
       if self._state ~= 'CONNECTING' then return end
 
       if err then
@@ -107,8 +115,7 @@ function Client:connect(url, proto)
         return on_error(self, err)
       end
 
-      local buffer = ut.Buffer.new('\r\n\r\n')
-      sock:start_read(function(sock, err, data)
+      sock:write(req, function(sock, err)
         if self._state ~= 'CONNECTING' then return end
 
         if err then
@@ -116,53 +123,63 @@ function Client:connect(url, proto)
           return on_error(self, err)
         end
 
-        buffer:append(data)
-        local response = buffer:read("*l")
-        if not response then return end
-        sock:stop_read()
+        local buffer = ut.Buffer.new('\r\n\r\n')
+        sock:start_read(function(sock, err, data)
+          if self._state ~= 'CONNECTING' then return end
 
-        local headers = handshake.http_headers(response .. '\r\n\r\n')
-        local expected_accept = handshake.sec_websocket_accept(key)
-        if headers['sec-websocket-accept'] ~= expected_accept then
-          self._state = 'CLOSED'
-          return on_error(self, 'accept failed')
-        end
-
-        on_open(self)
-
-        do -- start client loop
-          local last = buffer:read("*a")
-          local frames, first_opcode = {}
-
-          local on_data = function(self, data)
-            local encoded = (last or '') .. data
-
-            while self._state == 'OPEN' do
-              local decoded, fin, opcode, rest = frame.decode(encoded)
-
-              if not decoded then break end
-              if not first_opcode then first_opcode = opcode end
-              tappend(frames, decoded)
-              encoded = rest
-
-              if fin == true then
-                on_message(self, tconcat(frames), first_opcode)
-                frames, first_opcode = {}
-              end
-            end
-
-            last = encoded
+          if err then
+            self._state = 'CLOSED'
+            return on_error(self, err)
           end
 
-          sock:start_read(function(sock, err, data)
-            if err then return handle_socket_err(self, err) end
-            on_data(self, data)
-          end)
+          buffer:append(data)
+          local response = buffer:read("*l")
+          if not response then return end
+          sock:stop_read()
 
-          -- if we have some data from handshake
-          if last then uv.defer(on_data, self, '') end
-        end
+          local headers = handshake.http_headers(response .. '\r\n\r\n')
+          local expected_accept = handshake.sec_websocket_accept(key)
+          if headers['sec-websocket-accept'] ~= expected_accept then
+            self._state = 'CLOSED'
+            return on_error(self, 'accept failed')
+          end
 
+          on_open(self)
+
+          do -- start client loop
+            local last = buffer:read("*a")
+            local frames, first_opcode = {}
+
+            local on_data = function(self, data)
+              local encoded = (last or '') .. data
+
+              while self._state == 'OPEN' do
+                local decoded, fin, opcode, rest = frame.decode(encoded)
+
+                if not decoded then break end
+                if not first_opcode then first_opcode = opcode end
+                tappend(frames, decoded)
+                encoded = rest
+
+                if fin == true then
+                  on_message(self, tconcat(frames), first_opcode)
+                  frames, first_opcode = {}
+                end
+              end
+
+              last = encoded
+            end
+
+            sock:start_read(function(sock, err, data)
+              if err then return handle_socket_err(self, err) end
+              on_data(self, data)
+            end)
+
+            -- if we have some data from handshake
+            if last then uv.defer(on_data, self, '') end
+          end
+
+        end)
       end)
     end)
   end)
