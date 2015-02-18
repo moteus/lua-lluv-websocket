@@ -4,14 +4,19 @@ local handshake = require 'websocket.handshake'
 local websocket = require 'websocket'
 local uv        = require 'lluv'
 local ut        = require 'lluv.utils'
-local LOG       = require 'log'.new(
-  require'log.writer.stdout'.new(),
-  require'log.formatter.concat'.new(' ')
-)
 local tconcat   = table.concat
 local tappend   = function(t, v) t[#t + 1] = v return t end
+local DummyLogger do
+  local dummy = function() end
 
-local clients = {[true] = {}}
+  DummyLogger = {
+    info    = dummy;
+    warning = dummy;
+    error   = dummy;
+    debug   = dummy;
+    trace   = dummy;
+  }
+end
 
 local EOF = uv.error(uv.ERROR_UV, uv.EOF)
 
@@ -23,21 +28,20 @@ local Client = ut.class() do
 
 local TEXT, BINARY, CLOSE = frame.TEXT, frame.BINARY, frame.CLOSE
 
-local send = function(self, msg, opcode, cb)
+local send     = function(self, msg, opcode, cb)
   local encoded = frame.encode(msg, opcode or TEXT)
   if not cb then return self._sock:write(encoded) end
   return self._sock:write(encoded, cb)
 end
 
 local on_error = function(self, err)
-  if clients[protocol] ~= nil then clients[protocol][self] = nil end
+  if self._clients[self._proto] ~= nil then self._clients[self._proto][self] = nil end
 
   ocall(self._on_error, self, err)
-  LOG.debug('Websocket server error', err)
 end
 
 local on_close = function(self, was_clean, code, reason)
-  if clients[protocol] ~= nil then clients[protocol][self] = nil end
+  if self._clients[self._proto] ~= nil then self._clients[self._proto][self] = nil end
 
   if self._close_timer then
     self._close_timer:close()
@@ -80,13 +84,15 @@ local on_message = function(self, message, opcode)
   end
 end
 
-function Client:__init(sock, protocol)
-  self._sock              = assert(sock)
-  self._proto             = protocol
-  self._state             = 'OPEN'
-  self._started           = false
-  self._close_timer       = nil
-  clients[protocol][self] = true
+function Client:__init(listener, sock, protocol)
+  self._sock                    = assert(sock)
+  self._proto                   = protocol
+  self._state                   = 'OPEN'
+  self._started                 = false
+  self._close_timer             = nil
+  self._logger                  = listener:logger()
+  self._clients                 = listener._clients -- reference to all clients on server
+  self._clients[protocol][self] = true -- register self on server
   return self
 end
 
@@ -110,7 +116,7 @@ function Client:send(message, opcode)
 end
 
 function Client:broadcast(...)
-  for client in pairs(clients[self._proto]) do
+  for client in pairs(self._clients[self._proto]) do
     if client._state == 'OPEN' then
       client:send(...)
     end
@@ -118,7 +124,7 @@ function Client:broadcast(...)
 end
 
 function Client:close(code, reason, timeout)
-  if clients[protocol] ~= nil then clients[protocol][self] = nil end
+  if self._clients[self._proto] ~= nil then self._clients[self._proto][self] = nil end
 
   if not self._started then self:start() end
 
@@ -127,7 +133,7 @@ function Client:close(code, reason, timeout)
     timeout = (timeout or 3) * 1000 -- msec
     local encoded = frame.encode_close(code or 1000, reason or '')
     send(self, encoded, CLOSE)
-    self._close_timer = ut.timer():start(timeout, function(timer)
+    self._close_timer = uv.timer():start(timeout, function(timer)
       on_close(self, false, 1006, 'timeout')
     end)
   end
@@ -135,12 +141,10 @@ function Client:close(code, reason, timeout)
   return self
 end
 
-function Client:start()
-  local frames, first_opcode, last = {}
+function Client:start(last)
+  local frames, first_opcode = {}
 
-  self._sock:start_read(function(sock, err, data)
-    if err then return handle_sock_err(self, err) end
-
+  local on_data = function(self, data)
     local encoded = (last or '') .. data
 
     while self._state == 'OPEN' do
@@ -156,8 +160,17 @@ function Client:start()
         frames, first_opcode = {}
       end
     end
+
     last = encoded
+  end
+
+  self._sock:start_read(function(sock, err, data)
+    if err then return handle_sock_err(self, err) end
+    on_data(self, data)
   end)
+
+  -- if we have some data from handshake
+  if last then uv.defer(on_data, self, '') end
 
   self._started = true
 end
@@ -167,34 +180,34 @@ end
 local Listener = ut.class() do
 
 local function on_error(self, err)
+  self:logger().error('Websocket listen error:', err)
   ocall(self._on_error, self, err)
-  LOG.debug('Websocket listen error', err)
 end
 
 local function Handshake(self, sock, cb)
   local buffer = ut.Buffer.new('\r\n\r\n')
   sock:start_read(function(sock, err, data)
     if err then
-      LOG.error('Websocket Handshake failed due to socket err:', err)
+      self:logger().error('Websocket Handshake failed due to socket err:', err)
       return cb(self, err)
     end
 
     buffer:append(data)
-    request = buffer:read("*l")
+    local request = buffer:read("*l")
     if not request then return end
 
     sock:stop_read()
 
     local response, protocol = handshake.accept_upgrade(request .. '\r\n', self._protocols)
     if not response then
-      LOG.error("Handshake failed, Request:\n", request)
+      self:logger().error("Handshake failed, Request:\n", request)
       sock:close()
       return cb(self, "handshake failed", request)
     end
 
     sock:write(response, function(sock, err)
       if err then
-        LOG.error('Websocket client closed while handshake', err)
+        self:logger().error('Websocket client closed while handshake', err)
         sock:close()
         return cb(self, err)
       end
@@ -209,7 +222,7 @@ local function on_new_client(self, cli)
       return on_error(self, 'Websocket Handshake failed: ' .. tostring(err))
     end
 
-    LOG.info('Handshake done:', protocol)
+    self:logger().info('Handshake done:', protocol)
 
     local protocol_handler, protocol_index
     if protocol and self._handlers[protocol] then
@@ -224,9 +237,9 @@ local function on_new_client(self, cli)
       return on_error(self, 'Websocket Handshake failed: bad protocol - ' .. tostring(protocol))
     end
 
-    LOG.info('new client', protocol or 'default')
+    self:logger().info('new client', protocol or 'default')
 
-    local new_client = Client.new(sock, protocol_index)
+    local new_client = Client.new(self, sock, protocol_index)
     protocol_handler(new_client)
     new_client:start(data)
   end)
@@ -235,28 +248,34 @@ end
 function Listener:__init(opts)
   assert(opts and (opts.protocols or opts.default))
 
+  self._clients         = {[true] = {}}
+
+  local handlers, protocols = {}, {}
+  if opts.protocols then
+    for protocol, handler in pairs(opts.protocols) do
+      self._clients[protocol] = {}
+      tappend(protocols, protocol)
+      handlers[protocol] = handler
+    end
+  end
+
+  self._protocols       = protocols
+  self._handlers        = handlers
+  self._default_handler = opts.default
+
+  self._logger          = DummyLogger
+
   local sock, err = uv.tcp():bind(opts.interface or '*', opts.port or 80)
   if not sock then return nil, err end
 
   self._sock = sock
 
-  local handlers, protocols = {}, {}
-  if opts.protocols then
-    for protocol, handler in pairs(opts.protocols) do
-      clients[protocol] = {}
-      tappend(protocols, protocol)
-      handlers[protocol] = handler
-    end
-  end
-  self._protocols       = protocols
-  self._handlers        = handlers
-  self._default_handler = opts.default
 
   sock:listen(function(sock, err)
     local client_sock, err = sock:accept()
     assert(client_sock, tostring(err))
 
-    LOG.info('New connection:', client_sock:getpeername())
+    self:logger().info('New connection:', client_sock:getpeername())
 
     on_new_client(self, client_sock)
   end)
@@ -267,13 +286,17 @@ function Listener:close(keep_clients)
 
   self._sock:close()
   if not keep_clients then
-    for protocol, clients in pairs(clients) do
+    for protocol, clients in pairs(self._clients) do
       for client in pairs(clients) do
         client:close()
       end
     end
   end
   self._sock = nil
+end
+
+function Listener:logger()
+  return self._logger
 end
 
 end
