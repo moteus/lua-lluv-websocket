@@ -299,6 +299,11 @@ function Listener:logger()
   return self._logger
 end
 
+function Listener:set_logger(logger)
+  self._logger = logger or DummyLogger
+  return self
+end
+
 end
 
 local function listen(...)
