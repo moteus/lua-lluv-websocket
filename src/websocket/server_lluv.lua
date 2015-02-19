@@ -4,6 +4,9 @@ local handshake = require 'websocket.handshake'
 local websocket = require 'websocket'
 local uv        = require 'lluv'
 local ut        = require 'lluv.utils'
+local ok, ssl   = pcall(require, 'lluv.ssl')
+if not ok then ssl = nil end
+
 local tconcat   = table.concat
 local tappend   = function(t, v) t[#t + 1] = v return t end
 local DummyLogger do
@@ -263,13 +266,50 @@ function Listener:__init(opts)
   self._handlers        = handlers
   self._default_handler = opts.default
 
-  self._logger          = DummyLogger
+  self._logger          = opts.logger or DummyLogger
 
-  local sock, err = uv.tcp():bind(opts.interface or '*', opts.port or 80)
-  if not sock then return nil, err end
+  local ssl_ctx
+  if opts.ssl then
+    if not ssl then error("Unsupport WSS protocol") end
+    if type(opts.ssl.server) == 'function' then
+      ssl_ctx = opts.ssl
+    else
+      ssl_ctx = assert(ssl.context(opts.ssl))
+    end
+  end
+  self._ssl = ssl_ctx
+
+  local sock
+  if self._ssl then
+    sock = self._ssl:server()
+  else
+    sock = uv.tcp()
+  end
+
+  local ok, err = sock:bind(opts.interface or '*', opts.port or 80)
+  if not ok then
+    sock:close()
+    return nil, err
+  end
 
   self._sock = sock
 
+  local on_accept
+  if self._ssl then
+    on_accept = function(sock)
+      sock:handshake(function(sock, err)
+        if err then
+          sock:close()
+          return on_error(self, 'SSL Handshake failed: ' .. tostring(err))
+        end
+        on_new_client(self, sock)
+      end)
+    end
+  else
+    on_accept = function(sock)
+      on_new_client(self, sock)
+    end
+  end
 
   sock:listen(function(sock, err)
     local client_sock, err = sock:accept()
@@ -277,7 +317,7 @@ function Listener:__init(opts)
 
     self:logger().info('New connection:', client_sock:getpeername())
 
-    on_new_client(self, client_sock)
+    on_accept(client_sock)
   end)
 end
 

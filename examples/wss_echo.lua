@@ -1,15 +1,14 @@
-local uv  = require"lluv"
-local ssl = require"lluv.ssl"
-local WS  = require"websocket.client_lluv"
+local uv = require"lluv"
+local WS = require"websocket.client_lluv"
 
-local ctx = ssl.context{
+local ssl = {
   protocol = "tlsv1_2",
   cafile   = "curl-ca-bundle.crt",
   verify   = {"peer", "fail_if_no_peer_cert"},
   options  = {"all", "no_sslv2"},
 }
 
-local cli = WS{ssl = ctx} do
+local cli = WS{ssl = ssl} do
 
 local timer = uv.timer():start(0, 5000, function()
   cli:send("ECHO")
