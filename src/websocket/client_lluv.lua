@@ -119,7 +119,14 @@ function Client:connect(url, proto)
     end
 
     if protocol == 'wss' then
-      self._ssl_ctx = self._ssl_ctx or assert(ssl.context(self._ws.ssl))
+      if not self._ssl_ctx then
+        local ctx = assert(self._ws.ssl)
+        if type(ctx.client) == "function" then
+          self._ssl_ctx = ctx
+        else
+          self._ssl_ctx = assert(ssl.context(ctx))
+        end
+      end
       self._sock = self._ssl_ctx:client()
     else
       self._sock = uv.tcp()
