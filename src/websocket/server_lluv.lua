@@ -114,7 +114,10 @@ function Client:on_close(handler)
   return self
 end
 
-function Client:send(message, opcode)
+function Client:send(message, opcode, cb)
+  if cb then return send(self, message, opcode, function(sock, err)
+    cb(self, err)
+  end) end
   return send(self, message, opcode)
 end
 
