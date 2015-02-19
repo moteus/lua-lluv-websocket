@@ -319,6 +319,8 @@ function Listener:__init(opts)
 
     on_accept(client_sock)
   end)
+
+  return self
 end
 
 function Listener:close(keep_clients)

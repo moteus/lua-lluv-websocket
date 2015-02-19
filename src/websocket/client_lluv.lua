@@ -41,6 +41,8 @@ end
 local handle_socket_err = function(self, err)
   if self._state == 'OPEN' then
     on_close(self, false, 1006, err)
+  elseif self._state == 'CLOSING' then
+    on_close(self, true, 1000, err)
   elseif self._state ~= 'CLOSED' then
     on_error(self, err)
   end
@@ -257,9 +259,9 @@ function Client:close(code, reason, timeout)
     encoded = frame.encode(encoded, CLOSE, true)
     self._sock:write(encoded)
 
-    self._close_timer = uv.timer(timeout, function()
+    self._close_timer = uv.timer():start(timeout, function()
       on_close(false, 1006, 'timeout')
-    end):start()
+    end)
   end
 end
 
