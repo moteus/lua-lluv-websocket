@@ -267,6 +267,8 @@ end
 
 end
 
-return function(...)
+return setmetatable({
+  sync = require'websocket.client_lluv_sync';
+},{__call = function(_, ...)
   return Client.new(...)
-end
+end})
