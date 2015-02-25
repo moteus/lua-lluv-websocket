@@ -1,6 +1,4 @@
-local tools     = require 'websocket.tools'
 local frame     = require 'websocket.frame'
-local handshake = require 'websocket.handshake'
 local uv        = require 'lluv'
 local ut        = require 'lluv.utils'
 local uws       = require 'lluv.websocket'
@@ -30,7 +28,7 @@ end
 
 local Client = ut.class() do
 
-local TEXT, BINARY, CLOSE = frame.TEXT, frame.BINARY, frame.CLOSE
+local TEXT, BINARY = frame.TEXT, frame.BINARY
 
 local send     = function(self, msg, opcode, cb)
   if not cb then return self._sock:write(msg, opcode) end
