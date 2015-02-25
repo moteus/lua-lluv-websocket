@@ -1,5 +1,5 @@
 local uv = require"lluv"
-local WS = require"websocket.client_lluv"
+local WS = require"websocket"
 
 local ssl = {
   protocol = "tlsv1_2",
@@ -8,7 +8,7 @@ local ssl = {
   options  = {"all", "no_sslv2"},
 }
 
-local cli = WS{ssl = ssl} do
+local cli = WS.client.lluv{ssl = ssl} do
 
 local timer = uv.timer():start(0, 5000, function()
   cli:send("ECHO")

@@ -1,7 +1,7 @@
 local uv = require"lluv"
-local WS = require"websocket.client_lluv"
+local WS = require"websocket"
 
-local cli = WS() do
+local cli = WS.client.lluv() do
 
 local timer = uv.timer():start(0, 5000, function()
   cli:send("ECHO")
