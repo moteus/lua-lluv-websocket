@@ -17,7 +17,7 @@ local tappend   = function(t, v) t[#t + 1] = v return t end
 local ERRORS = {
   [-1] = "EHANDSHAKE";
   [-2] = "EOF";
-  [-2] = "ESTATE";
+  [-3] = "ESTATE";
 }
 
 local WSError = ut.class() do
@@ -235,7 +235,7 @@ function WSSocket:_server_handshake(protocols, cb)
       self._ready = true
       self._state = "WAIT_DATA"
 
-      cb(self)
+      cb(self, nil, protocol)
     end)
   end)
 end
@@ -400,9 +400,9 @@ function WSSocket:bind(host, port, cb)
   if cb then
     ok, err = self._sock:bind(host, port, function(_, ...) cb(self, ...) end)
   else
-    ok, err = self._sock:bind(host, port, function(_, ...) cb(self, ...) end)
+    ok, err = self._sock:bind(host, port)
   end
-  if ok then return nil, err end
+  if not ok then return nil, err end
   return self
 end
 
@@ -422,6 +422,14 @@ end
 
 function WSSocket:__tostring()
   return "Lua-UV websocket (" .. tostring(self._sock) .. ")"
+end
+
+function WSSocket:getsockname()
+  return self._sock:getsockname()
+end
+
+function WSSocket:getpeername()
+  return self._sock:getpeername()
 end
 
 end
