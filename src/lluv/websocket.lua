@@ -240,7 +240,7 @@ function WSSocket:_server_handshake(protocols, cb)
   end)
 end
 
-function WSSocket:_close(code, reason, cb)
+function WSSocket:_close(clean, code, reason, cb)
   assert(self._sock)
 
   if self._timer then
@@ -249,7 +249,7 @@ function WSSocket:_close(code, reason, cb)
   end
 
   if cb then
-    self._sock:close(function(_, ...) cb(self, code, reason) end)
+    self._sock:close(function(_, ...) cb(self, clean, code, reason) end)
   else
     self._sock:close()
   end
@@ -260,7 +260,7 @@ end
 local function start_close_timer(self, timeout)
   assert(not self._timer)
   self._timer = uv.timer():start((timeout or 3) * 1000, function()
-    self:_close(1006, 'timout', cb) --! @todo check code/reason
+    self:_close(false, 1006, 'timeout', self._on_close)
   end)
 end
 
@@ -273,32 +273,28 @@ function WSSocket:close(code, reason, cb)
     cb, reason = reason
   end
 
-  if not self._ready then -- no handshake
-    return self:_close(code, reason, cb)
+  code   = code or 1000
+  reason = reason or ''
+
+  -- not connected or no handshake
+  if (not self._ready) or (self._state == 'CLOSED') then
+    return self:_close(true, code, reason, cb)
   end
 
-  if self._state == 'FAILED' then -- IO error
-    return self:_close(code, reason, cb)
-  end
-
-  if self._state == 'CONNECTING' then -- Connect interrupt
-    return self:_close(code, reason, cb)
-  end
-
-  if self._state == 'CLOSED' then -- no connection
-    if self._code then code, reason = self._code, self._reason end
-    return self:_close(code, reason, cb)
+  -- IO error or interrupted connection
+  if (self._state == 'FAILED') or (self._state == 'CONNECTING') then 
+    return self:_close(false, code, reason, cb)
   end
 
   if self._state == 'WAIT_DATA' then -- We in regular data transfer state
     self._state = 'WAIT_CLOSE'
 
-    local encoded = frame.encode_close(code or 1000, reason or '')
+    local encoded = frame.encode_close(code, reason)
     self:write(encoded, CLOSE)
 
     start_close_timer(self, 3) --! @todo fix hardcoded timeout
 
-    self:stop_read():start_read(function()end)
+    self:_stop_read():_start_read(function()end)
 
     self._on_close, self._code, self._reason = cb, code, reason
 
@@ -309,6 +305,7 @@ function WSSocket:close(code, reason, cb)
   if self._state == "CLOSE_PENDING" then
     self._state = 'WAIT_CLOSE'
 
+    self._on_close = cb
     start_close_timer(self, 3) --! @todo fix hardcoded timeout
     return
   end
@@ -338,14 +335,14 @@ local on_data = function(self, data, cb)
         self._code, self._reason = frame.decode_close(f)
 
         if self._state == 'WAIT_CLOSE' then
-          return self:_close(self._code, self._reason, self._on_close)
+          return self:_close(true, self._code, self._reason, self._on_close)
         end
 
         self._state = "CLOSE_PENDING"
 
         local encoded = frame.encode_close(self._code, self._reason)
         self:write(encoded, CLOSE, function(self, err)
-          return self:_close(self._code, self._reason, self._on_close)
+          return self:_close(true, self._code, self._reason, self._on_close)
         end)
 
         cb(self, WSError_EOF(self._code, self._reason))
@@ -359,14 +356,15 @@ local on_data = function(self, data, cb)
   self._tail = encoded
 end
 
-function WSSocket:start_read(cb)
+function WSSocket:_start_read(cb)
   self._sock:start_read(function(sock, err, data)
     if err then
-      self:stop_read()
+      self:_stop_read()
       self._sock:close()
       self._sock = nil
       return cb(self, err)
     end
+
     on_data(self, data, cb)
   end)
 
@@ -379,10 +377,22 @@ function WSSocket:start_read(cb)
   return self
 end
 
-function WSSocket:stop_read()
+function WSSocket:start_read(...)
+  if self._state ~= 'WAIT_DATA' then return end
+
+  return self:_start_read(...)
+end
+
+function WSSocket:_stop_read()
   self._sock:stop_read()
   self._reading = false
   return self
+end
+
+function WSSocket:stop_read()
+  if self._state ~= 'WAIT_DATA' then return end
+
+  return self:_stop_read()
 end
 
 function WSSocket:bind(host, port, cb)
