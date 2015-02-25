@@ -15,8 +15,9 @@ local tconcat   = table.concat
 local tappend   = function(t, v) t[#t + 1] = v return t end
 
 local ERRORS = {
-  [-1] = "HANDSHAKE";
+  [-1] = "EHANDSHAKE";
   [-2] = "EOF";
+  [-2] = "ESTATE";
 }
 
 local WSError = ut.class() do
@@ -62,11 +63,15 @@ end
 end
 
 local function WSError_handshake_faild(msg)
-  return WSError.new(WSError.HANDSHAKE, nil, "Handshake failed", msg)
+  return WSError.new(WSError.EHANDSHAKE, nil, "Handshake failed", msg)
 end
 
 local function WSError_EOF(code, reason)
   return WSError.new(WSError.EOF, nil, "end of file", code, reason)
+end
+
+local function WSError_ESTATE(msg)
+  return WSError.new(WSError.ESTATE, nil, msg)
 end
 
 local WSSocket = ut.class() do
@@ -91,6 +96,14 @@ local function dns_request(host, cb)
 end
 
 function WSSocket:connect(url, proto, cb)
+  assert(self._sock)
+
+  if self._state ~= "CLOSED" then
+    uv.defer(cb, self, WSError_ESTATE("wrong state"))
+  end
+
+  self._state = "CONNECTING"
+
   local key, req
 
   local protocol, host, port, uri = tools.parse_url(url)
@@ -268,7 +281,11 @@ function WSSocket:close(code, reason, cb)
     return self:_close(code, reason, cb)
   end
 
-  if self._state == 'CLOSED' then -- close handshake already done
+  if self._state == 'CONNECTING' then -- Connect interrupt
+    return self:_close(code, reason, cb)
+  end
+
+  if self._state == 'CLOSED' then -- no connection
     if self._code then code, reason = self._code, self._reason end
     return self:_close(code, reason, cb)
   end
