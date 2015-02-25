@@ -347,7 +347,6 @@ local on_data = function(self, data, cb)
 
         cb(self, WSError_EOF(self._code, self._reason))
       elseif c == PING then self:write(f, PONG)
-      elseif c == PONG then -- IGNORE
       elseif self._state == 'WAIT_DATA' then
         cb(self, nil, f, c, true)
       end
