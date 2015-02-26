@@ -15,7 +15,7 @@ description = {
 dependencies = {
   "lua >= 5.1, < 5.4",
   "lua-websockets-core",
-  "lluv-websockets",
+  "lluv-websocket",
 }
 
 build = {
