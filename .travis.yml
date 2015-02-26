@@ -1,0 +1,36 @@
+language: c
+
+env:
+  global:
+    - LUAROCKS=2.2.0
+  matrix:
+    - LUA=lua5.1
+    # - LUA=lua5.2
+    # - LUA=lua5.3
+    # - LUA=luajit
+
+branches:
+  only:
+    - master
+
+before_install:
+  - bash .travis/setup_lua.sh
+  - bash .travis/setup_uv.sh
+  - sudo luarocks install lua-websockets-core --server=http://rocks.moonscript.org/dev
+  - sudo luarocks install lluv --server=http://rocks.moonscript.org/dev UV_DIR=$TRAVIS_BUILD_DIR/libuv
+
+install:
+  - sudo luarocks make rockspecs/lluv-websocket-scm-0.rockspec
+  - sudo luarocks make rockspecs/lua-websockets-lluv.scm-0.rockspec
+
+script: 
+  - cd test
+  - lua test.lua
+
+# after_success:
+#   - luacov-coveralls -j c.report.json
+
+notifications:
+  email:
+    on_success: change
+    on_failure: always
