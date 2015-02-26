@@ -225,7 +225,7 @@ function WSSocket:_client_handshake(key, req, cb)
     self._state  = "WAIT_DATA"
     self._masked = true
 
-    cb(self)
+    cb(self, nil, headers)
   end)
 
   expected_accept = handshake.sec_websocket_accept(key)
@@ -265,7 +265,9 @@ function WSSocket:_server_handshake(cb)
 
     sock:stop_read()
 
-    local response, protocol = handshake.accept_upgrade(request .. '\r\n', self._protocols)
+    request = request .. '\r\n'
+
+    local response, protocol = handshake.accept_upgrade(request, self._protocols)
     if not response then
       self._state = 'FAILED'
       self._sock:shutdown()
@@ -273,6 +275,7 @@ function WSSocket:_server_handshake(cb)
       return cb(self, err)
     end
 
+    local headers
     sock:write(response, function(sock, err)
       if err then
         self._state = 'FAILED'
@@ -285,8 +288,10 @@ function WSSocket:_server_handshake(cb)
       self._state  = "WAIT_DATA"
       self._masked = false
 
-      cb(self, nil, protocol)
+      cb(self, nil, protocol, headers)
     end)
+    headers = handshake.http_headers(request)
+
   end)
 end
 
