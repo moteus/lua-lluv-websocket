@@ -1,4 +1,4 @@
-package = "lluv-websocket"
+package = "lua-websockets-lluv"
 version = "scm-0"
 
 source = {
@@ -6,7 +6,7 @@ source = {
 }
 
 description = {
-  summary = "Websockets for Lua based on libuv binding",
+  summary = "libuv backend for websockets for Lua",
   homepage = "http://github.com/moteus/lua-lluv-websocket",
   license = "MIT/X11",
   detailed = "Provides async client and server for lluv."
@@ -15,13 +15,15 @@ description = {
 dependencies = {
   "lua >= 5.1, < 5.4",
   "lua-websockets-core",
-  "lluv",
+  "lluv-websockets",
 }
 
 build = {
   type = "builtin",
 
   modules = {
-    ['lluv.websocket'] = 'src/lluv/websocket.lua',
+    ['websocket.server_lluv'     ] = 'src/websocket/server_lluv.lua',
+    ['websocket.client_lluv'     ] = 'src/websocket/client_lluv.lua',
+    ['websocket.client_lluv_sync'] = 'src/websocket/client_lluv_sync.lua',
   }
 }
