@@ -135,7 +135,7 @@ end
 
 function WSSocket:write(msg, opcode, cb)
   if type(opcode) == 'function' then cb, opcode = opcode end
-  local encoded = frame.encode(msg, opcode or TEXT, true)
+  local encoded = frame.encode(msg, opcode or TEXT, self._masked)
   local ok, err
   if not cb then ok, err = self._sock:write(encoded)
   else ok, err = self._sock:write(encoded, function(_, ...) cb(self, ...) end) end
@@ -174,9 +174,10 @@ function WSSocket:_client_handshake(key, req, cb)
       return cb(self, err)
     end
 
-    self._tail = buffer:read("*a")
-    self._ready = true
-    self._state = "WAIT_DATA"
+    self._tail   = buffer:read("*a")
+    self._ready  = true
+    self._state  = "WAIT_DATA"
+    self._masked = true
 
     cb(self)
   end)
@@ -231,9 +232,10 @@ function WSSocket:_server_handshake(protocols, cb)
         return cb(self, err)
       end
 
-      self._tail  = buffer:read("*a")
-      self._ready = true
-      self._state = "WAIT_DATA"
+      self._tail   = buffer:read("*a")
+      self._ready  = true
+      self._state  = "WAIT_DATA"
+      self._masked = false
 
       cb(self, nil, protocol)
     end)
@@ -277,8 +279,12 @@ function WSSocket:close(code, reason, cb)
   reason = reason or ''
 
   -- not connected or no handshake
-  if (not self._ready) or (self._state == 'CLOSED') then
+  if not self._ready then
     return self:_close(true, code, reason, cb)
+  end
+
+  if self._state == 'CLOSED' then
+    return self:_close(true, self._code, self._reason, self._on_close)
   end
 
   -- IO error or interrupted connection
@@ -338,11 +344,17 @@ local on_data = function(self, data, cb)
           return self:_close(true, self._code, self._reason, self._on_close)
         end
 
-        self._state = "CLOSE_PENDING"
+        self._state = 'CLOSE_PENDING'
 
         local encoded = frame.encode_close(self._code, self._reason)
         self:write(encoded, CLOSE, function(self, err)
-          return self:_close(true, self._code, self._reason, self._on_close)
+          if self._state == 'CLOSE_PENDING' then
+            -- we did not call `close` yet so we just wait
+            self._state = 'CLOSED'
+          elseif self._state == 'WAIT_CLOSE' then
+            -- we call `close` but timeout is not expire
+            return self:_close(true, self._code, self._reason, self._on_close)
+          end
         end)
 
         cb(self, WSError_EOF(self._code, self._reason))
@@ -359,8 +371,7 @@ function WSSocket:_start_read(cb)
   self._sock:start_read(function(sock, err, data)
     if err then
       self:_stop_read()
-      self._sock:close()
-      self._sock = nil
+      self._sock:shutdown()
       return cb(self, err)
     end
 

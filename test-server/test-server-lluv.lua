@@ -1,7 +1,7 @@
 local uv        = require "lluv"
 local websocket = require "websocket"
 
-require "websocket.server_lluv".listen{
+require "websocket".server.lluv.listen{
   protocols = {
     ['lws-mirror-protocol'] = function(ws)
       ws:on_message(
@@ -35,12 +35,11 @@ require "websocket.server_lluv".listen{
 }
 
 local function cur_dir()
+  local f = uv.cwd()
   if package.config:sub(1, 1) == '\\' then
-    local f = io.popen('cd')
-    return '/' .. f:read("*all"):gsub("\\", "/"):gsub("\n", "")
+    f = '/' .. f:gsub("\\", "/")
   end
-  local f = io.popen('pwd')
-  if f then return f:read("*all") end
+  return f
 end
 
 print('Open browser:')
