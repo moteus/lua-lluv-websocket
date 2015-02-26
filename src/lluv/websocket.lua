@@ -100,14 +100,15 @@ function WSSocket:__init(opt, s)
   if is_sock(opt) then s, opt = opt end
   opt = opt or {}
 
-  self._sock    = s or uv.tcp()
-  self._frames  = {}
-  self._opcode  = nil
-  self._tail    = nil
-  self._origin  = nil
-  self._ready   = nil
-  self._state   = 'CLOSED' -- no connection
-  self._timeout = opt.timeout
+  self._sock      = s or uv.tcp()
+  self._frames    = {}
+  self._opcode    = nil
+  self._tail      = nil
+  self._origin    = nil
+  self._ready     = nil
+  self._state     = 'CLOSED' -- no connection
+  self._timeout   = opt.timeout
+  self._protocols = opt.protocols
 
   if opt.ssl then
     if type(opt.ssl.server) == 'function' then
@@ -230,7 +231,7 @@ function WSSocket:_client_handshake(key, req, cb)
   expected_accept = handshake.sec_websocket_accept(key)
 end
 
-function WSSocket:handshake(protocols, cb)
+function WSSocket:handshake(cb)
   if self._sock.handshake then
     self._sock:handshake(function(sock, err)
       if err then
@@ -238,16 +239,18 @@ function WSSocket:handshake(protocols, cb)
         self._sock:shutdown()
         return cb(self, err)
       end
-      self:_server_handshake(protocols, cb)
+      self:_server_handshake(cb)
     end)
     return
   end
 
-  self:_server_handshake(protocols, cb)
+  self:_server_handshake(cb)
 end
 
-function WSSocket:_server_handshake(protocols, cb)
+function WSSocket:_server_handshake(cb)
   local buffer = ut.Buffer.new('\r\n\r\n')
+
+  assert(type(self._protocols) == 'table')
 
   self._sock:start_read(function(sock, err, data)
     if err then
@@ -262,7 +265,7 @@ function WSSocket:_server_handshake(protocols, cb)
 
     sock:stop_read()
 
-    local response, protocol = handshake.accept_upgrade(request .. '\r\n', protocols)
+    local response, protocol = handshake.accept_upgrade(request .. '\r\n', self._protocols)
     if not response then
       self._state = 'FAILED'
       self._sock:shutdown()
@@ -465,14 +468,27 @@ function WSSocket:accept()
   local cli, err = self._sock:accept()
   if not cli then return nil, err end
   if self._ssl then cli = assert(self._ssl:server(cli)) end
-  return WSSocket.new(cli)
+  return WSSocket.new({protocols = self._protocols}, cli)
 end
 
-function WSSocket:listen(cb)
+function WSSocket:listen(protocols, cb)
+  if type(protocols) == 'function' then
+    cb, protocols = protocols
+  end
+
+  self._protocols = protocols or self._protocols
+  if not self._protocols then error("No protocols") end
+
+  if type(self._protocols) == 'string' then self._protocols = {self._protocols} end
+
+  assert(type(self._protocols) == 'table')
+
   local ok, err = self._sock:listen(function(_, ...)
     cb(self, ...)
   end)
+
   if not ok then return nil, err end
+
   return self
 end
 

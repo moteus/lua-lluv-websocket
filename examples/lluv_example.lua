@@ -8,18 +8,19 @@ server:bind("127.0.0.1", 12345, function(self, err)
     return server:close()
   end
 
-  server:listen(function(self, err)
+  server:listen("echo", function(self, err)
     if err then
       print("Server listen:", err)
       return server:close()
     end
 
     local cli = server:accept()
-    cli:handshake({'echo'}, function(self, err)
+    cli:handshake(function(self, err, protocol)
       if err then
         print("Server handshake error:", err)
         return cli:close()
       end
+      print("New server connection:", protocol)
 
       cli:start_read(function(self, err, message, opcode)
         if err then
