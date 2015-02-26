@@ -1,11 +1,10 @@
-local frame     = require 'websocket.frame'
 local uv        = require 'lluv'
 local ut        = require 'lluv.utils'
-local uws       = require 'lluv.websocket'
+local websocket = require 'lluv.websocket'
 
 local ocall     = function (f, ...) if f then return f(...) end end
 
-local TEXT, BINARY = frame.TEXT, frame.BINARY
+local TEXT, BINARY = websocket.TEXT, websocket.BINARY
 
 local Client = ut.class() do
 
@@ -49,7 +48,7 @@ end
 function Client:connect(url, proto)
   if self._sock then return end
 
-  self._sock = uws.new{ssl = self._ws.ssl}
+  self._sock = websocket.new{ssl = self._ws.ssl}
 
   self._sock:connect(url, proto, function(sock, err)
     if err then return on_error(self, err) end

@@ -26,7 +26,6 @@ local ERRORS = {
 
 local WSError = ut.class() do
 
-
 for k, v in pairs(ERRORS) do WSError[v] = k end
 
 function WSError:__init(no, name, msg, ext, code, reason)
@@ -513,4 +512,12 @@ end
 
 return {
   new = WSSocket.new;
+
+  TEXT         = TEXT;
+  BINARY       = BINARY;
+  PING         = PING;
+  PONG         = PONG;
+
+  CONTINUATION = CONTINUATION;
+  CLOSE        = CLOSE;
 }

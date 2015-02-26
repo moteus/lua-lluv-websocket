@@ -1,7 +1,6 @@
-local frame     = require 'websocket.frame'
 local uv        = require 'lluv'
 local ut        = require 'lluv.utils'
-local uws       = require 'lluv.websocket'
+local websocket = require 'lluv.websocket'
 
 local tconcat   = table.concat
 local tappend   = function(t, v) t[#t + 1] = v return t end
@@ -25,7 +24,7 @@ end
 
 local Client = ut.class() do
 
-local TEXT, BINARY = frame.TEXT, frame.BINARY
+local TEXT, BINARY = websocket.TEXT, websocket.BINARY
 
 local send     = function(self, msg, opcode, cb)
   if not cb then return self._sock:write(msg, opcode) end
@@ -178,7 +177,7 @@ function Listener:__init(opts)
 
   self._logger          = opts.logger or DummyLogger
 
-  sock = uws.new{ssl = opts.ssl}
+  sock = websocket.new{ssl = opts.ssl}
 
   local ok, err = sock:bind(opts.interface or '*', opts.port or 80)
   if not ok then

@@ -2,7 +2,6 @@ local uv     = require'lluv'
 local ut     = require'lluv.utils'
 local socket = require'lluv.luasocket'
 local sync   = require'websocket.sync'
-local tools  = require'websocket.tools'
 
 local ssl, sslsocket do
   local ok
