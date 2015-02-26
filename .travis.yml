@@ -21,7 +21,7 @@ before_install:
 
 install:
   - sudo luarocks make rockspecs/lluv-websocket-scm-0.rockspec
-  - sudo luarocks make rockspecs/lua-websockets-lluv.scm-0.rockspec
+  - sudo luarocks make rockspecs/lua-websockets-lluv-scm-0.rockspec
 
 script: 
   - cd test
