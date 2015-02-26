@@ -3,9 +3,6 @@ local uv        = require 'lluv'
 local ut        = require 'lluv.utils'
 local uws       = require 'lluv.websocket'
 
-local ok, ssl   = pcall(require, 'lluv.ssl')
-if not ok then ssl = nil end
-
 local ocall     = function (f, ...) if f then return f(...) end end
 
 local TEXT, BINARY = frame.TEXT, frame.BINARY
@@ -52,21 +49,7 @@ end
 function Client:connect(url, proto)
   if self._sock then return end
 
-  if url:match("^wss:") then
-    if not self._ssl_ctx then
-      local ctx = assert(self._ws.ssl)
-      if type(ctx.client) == "function" then
-        self._ssl_ctx = ctx
-      else
-        self._ssl_ctx = assert(ssl.context(ctx))
-      end
-    end
-    self._sock = self._ssl_ctx:client()
-  else
-    self._sock = uv.tcp()
-  end
-
-  self._sock = uws.new(self._sock)
+  self._sock = uws.new{ssl = self._ws.ssl}
 
   self._sock:connect(url, proto, function(sock, err)
     if err then return on_error(self, err) end
