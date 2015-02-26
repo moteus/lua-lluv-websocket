@@ -4,6 +4,9 @@ local tools     = require "websocket.tools"
 local frame     = require "websocket.frame"
 local handshake = require "websocket.handshake"
 
+local ok, ssl   = pcall(require, 'lluv.ssl')
+if not ok then ssl = nil end
+
 local CONTINUATION = frame.CONTINUATION
 local TEXT         = frame.TEXT
 local BINARY       = frame.BINARY
@@ -18,6 +21,7 @@ local ERRORS = {
   [-1] = "EHANDSHAKE";
   [-2] = "EOF";
   [-3] = "ESTATE";
+  [-4] = "ENOSUP";
 }
 
 local WSError = ut.class() do
@@ -74,16 +78,46 @@ local function WSError_ESTATE(msg)
   return WSError.new(WSError.ESTATE, nil, msg)
 end
 
+local function WSError_ENOSUP(msg)
+  return WSError.new(WSError.ENOSUP, nil, msg)
+end
+
 local WSSocket = ut.class() do
 
-function WSSocket:__init(s)
-  self._sock = s or uv.tcp()
-  self._frames = {}
-  self._opcode = nil
-  self._tail   = nil
-  self._origin = nil
-  self._ready  = nil
-  self._state  = 'CLOSED' -- no connection
+local function is_sock(s)
+  local ts = type(s)
+  if ts == 'userdata' then return true end
+  if ts ~= 'table' then return false end
+  return 
+    s.start_read and
+    s.write      and
+    s.connect    and
+    s.shutdown   and
+    true
+end
+
+function WSSocket:__init(opt, s)
+  if is_sock(opt) then s, opt = opt end
+  opt = opt or {}
+
+  self._sock    = s or uv.tcp()
+  self._frames  = {}
+  self._opcode  = nil
+  self._tail    = nil
+  self._origin  = nil
+  self._ready   = nil
+  self._state   = 'CLOSED' -- no connection
+  self._timeout = opt.timeout
+
+  if opt.ssl then
+    if type(opt.ssl.server) == 'function' then
+      self._ssl = opt.ssl
+    else
+      if not ssl then error("Unsupport WSS protocol") end
+      self._ssl = assert(ssl.context(opt.ssl))
+    end
+  end
+
   return self
 end
 
@@ -107,6 +141,17 @@ function WSSocket:connect(url, proto, cb)
   local key, req
 
   local protocol, host, port, uri = tools.parse_url(url)
+
+  if protocol ~= 'ws' and protocol ~= 'wss'  then
+    return uv.defer(cb, self, WSError_ENOSUP("bad protocol - " .. protocol))
+  end
+
+  if protocol == 'wss' then
+    if not self._ssl then
+      return uv.defer(cb, self, WSError_ENOSUP("unsuported protocol - " .. protocol))
+    end
+    self._sock = assert(self._ssl:client(self._sock))
+  end
 
   dns_request(host, function(_, err, res)
     if err then return cb(self, err) end
@@ -419,6 +464,7 @@ end
 function WSSocket:accept()
   local cli, err = self._sock:accept()
   if not cli then return nil, err end
+  if self._ssl then cli = assert(self._ssl:server(cli)) end
   return WSSocket.new(cli)
 end
 
