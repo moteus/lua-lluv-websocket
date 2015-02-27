@@ -44,14 +44,16 @@ function runtTestCase(no, cb)
 
     cli:start_read(function(self, err, message, opcode)
       if err then
-        if isWSEOF(err) then
-          return cli:close(cb)
+        if not isWSEOF(err) then
+          print("Client read error:", err)
         end
-        print("Client read error:", err)
-        return cli:close()
+        return cli:close(cb)
       end
 
-      cli:write(message, opcode)
+      if opcode == websocket.TEXT or opcode == websocket.BINARY then
+        cli:write(message, opcode)
+      end
+
     end)
   end)
 end
@@ -106,7 +108,7 @@ end
 
 runAll()
 
--- runtTestCase(21, print)
+-- runtTestCase(1, print)
 
 uv.run()
 
