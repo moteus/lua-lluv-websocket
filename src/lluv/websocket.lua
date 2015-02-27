@@ -396,10 +396,19 @@ function WSSocket:close(code, reason, cb)
   end
 end
 
+local function protocol_error(self, msg, read_cb)
+  self._code, self._reason = 1002, msg or 'Protocol error'
+  self._state = 'CLOSE_PENDING2'
+  local encoded = frame.encode_close(self._code, self._reason)
+  self:write(encoded, CLOSE)
+
+  return read_cb(self, WSError_EOF(self._code, self._reason))
+end
+
 local on_data = function(self, data, cb)
   local encoded = (self._tail or '') .. data
   while self._sock and self._reading do
-    local decoded, fin, opcode, rest = frame.decode(encoded)
+    local decoded, fin, opcode, rest, _, rsv1, rsv2, rsv3 = frame.decode(encoded)
 
     if not decoded then break end
     if not self._opcode then self._opcode = opcode end
@@ -438,15 +447,12 @@ local on_data = function(self, data, cb)
 
         cb(self, WSError_EOF(self._code, self._reason))
       elseif self._state == 'WAIT_DATA' then
-        if c == PING then
-          if #f >= 126 then
-            self._code, self._reason = 1002, 'Protocol error'
-            self._state = 'CLOSE_PENDING2'
-            local encoded = frame.encode_close(self._code, self._reason)
-            self:write(encoded, CLOSE)
+        if rsv1 or rsv2 or rsv3 then
+          return protocol_error(self, "Invalid reserved bit", cb)
+        end
 
-            return cb(self, WSError_EOF(self._code, self._reason))
-          end
+        if c == PING then
+          if #f >= 126 then return protocol_error(self, "Too long payload", cb) end
 
           self:write(f, PONG)
         else
