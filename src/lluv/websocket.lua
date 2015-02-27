@@ -448,10 +448,10 @@ local on_data = function(self, data, cb)
             return cb(self, WSError_EOF(self._code, self._reason))
           end
 
-          return self:write(f, PONG)
+          self:write(f, PONG)
+        else
+          cb(self, nil, f, c, true)
         end
-
-        cb(self, nil, f, c, true)
       end
     end
   end
