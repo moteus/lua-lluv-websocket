@@ -1,4 +1,3 @@
-local pp        = require "pp"
 local uv        = require "lluv"
 local websocket = require "lluv.websocket"
 
@@ -98,14 +97,16 @@ function updateReports()
   end)
 end
 
-currentCaseId = 1
+function runAll()
+  currentCaseId = 1
+  getCaseCount(runNextCase)
+  uv.run()
+  updateReports()
+end
 
-getCaseCount(runNextCase)
+runAll()
 
--- runtTestCase(6, print)
+-- runtTestCase(21, print)
 
 uv.run()
 
-updateReports()
-
-uv.run()

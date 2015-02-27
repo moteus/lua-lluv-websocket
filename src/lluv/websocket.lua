@@ -60,12 +60,12 @@ function WSError:msg()    return self._msg    end
 
 function WSError:ext()    return self._ext    end
 
-function WSError:code()   return self._code   end
+function WSError:code()   return self._code and tostring(self._code) end
 
 function WSError:reason() return self._reason end
 
 function WSError:__tostring()
-  return string.format("[%s][%s] %s (%d) - %s %d(%s)",
+  return string.format("[%s][%s] %s (%d) - %s %s(%s)",
     self:cat(), self:name(), self:msg(), self:no(), self:ext(),
     self:code(), self:reason()
   )
@@ -94,6 +94,15 @@ local function WSError_ENOSUP(msg)
 end
 
 local WSSocket = ut.class() do
+
+-- State:
+-- CLOSED not connected or closed handshake
+-- WAIT_DATA data transfer mode
+-- WAIT_CLOSE client call close method and we wait timeout or response
+-- CLOSE_PENDING we recv CLOSE frame but client do not call close method 
+--          we wait response and stop read messages
+-- CLOSE_PENDING2 we send CLOSE frame but client do not call close method 
+--          we wait response and stop read messages.
 
 local function is_sock(s)
   local ts = type(s)
@@ -372,7 +381,7 @@ function WSSocket:close(code, reason, cb)
   end
 
   -- We already recv CLOSE, send CLOSE and now we wait close connection from other side
-  if self._state == "CLOSE_PENDING" then
+  if self._state == 'CLOSE_PENDING' or self._state == 'CLOSE_PENDING2' then
     self._state = 'WAIT_CLOSE'
 
     self._on_close = cb
@@ -408,6 +417,12 @@ local on_data = function(self, data, cb)
           return self:_close(true, self._code, self._reason, self._on_close)
         end
 
+        if self._state == 'CLOSE_PENDING2' then
+          self._state = 'CLOSED'
+          self._sock:_stop_read():shutdown()
+          return
+        end
+
         self._state = 'CLOSE_PENDING'
 
         local encoded = frame.encode_close(self._code, self._reason)
@@ -422,8 +437,20 @@ local on_data = function(self, data, cb)
         end)
 
         cb(self, WSError_EOF(self._code, self._reason))
-      elseif c == PING then self:write(f, PONG)
       elseif self._state == 'WAIT_DATA' then
+        if c == PING then
+          if #f >= 126 then
+            self._code, self._reason = 1002, 'Protocol error'
+            self._state = 'CLOSE_PENDING2'
+            local encoded = frame.encode_close(self._code, self._reason)
+            self:write(encoded, CLOSE)
+
+            return cb(self, WSError_EOF(self._code, self._reason))
+          end
+
+          return self:write(f, PONG)
+        end
+
         cb(self, nil, f, c, true)
       end
     end
