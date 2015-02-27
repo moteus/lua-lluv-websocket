@@ -18,6 +18,7 @@ before_install:
   - bash .travis/setup_uv.sh
   - sudo luarocks install lua-websockets-core --server=http://rocks.moonscript.org/dev
   - sudo luarocks install lluv --server=http://rocks.moonscript.org/dev UV_DIR=$TRAVIS_BUILD_DIR/libuv
+  - sudo luarocks install luasocket
 
 install:
   - sudo luarocks make rockspecs/lluv-websocket-scm-0.rockspec
