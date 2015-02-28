@@ -26,6 +26,14 @@ local CLOSE        = frame.CLOSE
 local PING         = frame.PING
 local PONG         = frame.PONG
 
+local function is_valid_fin_opcode(c)
+  return c == TEXT or
+         c == BINARY or
+         c == PING or
+         c == PONG or
+         c == CLOSE
+end
+
 local tconcat   = table.concat
 local tappend   = function(t, v) t[#t + 1] = v return t end
 
@@ -410,8 +418,13 @@ local on_data = function(self, data, cb)
   while self._sock and self._reading do
     local decoded, fin, opcode, rest, _, rsv1, rsv2, rsv3 = frame.decode(encoded)
 
+    
     if not decoded then break end
-    if not self._opcode then self._opcode = opcode end
+    if not self._opcode then self._opcode = opcode
+    else
+      --! @todo shutdown
+      assert(opcode == CONTINUATION, tostring(opcode))
+    end
     tappend(self._frames, decoded)
     encoded = rest
 
@@ -448,13 +461,17 @@ local on_data = function(self, data, cb)
         cb(self, WSError_EOF(self._code, self._reason))
       elseif self._state == 'WAIT_DATA' then
         if rsv1 or rsv2 or rsv3 then
-          return protocol_error(self, "Invalid reserved bit", cb)
+          protocol_error(self, "Invalid reserved bit", cb)
         end
 
         if c == PING then
-          if #f >= 126 then return protocol_error(self, "Too long payload", cb) end
-
-          self:write(f, PONG)
+          if #f >= 126 then
+            protocol_error(self, "Too long payload", cb)
+          else
+            self:write(f, PONG)
+          end
+        elseif not is_valid_fin_opcode(c) then
+          protocol_error(self, "Invalid opcode", cb)
         else
           cb(self, nil, f, c, true)
         end
