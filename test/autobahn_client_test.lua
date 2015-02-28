@@ -1,10 +1,7 @@
-require "./utils"
-
 local uv        = require "lluv"
 local websocket = require "lluv.websocket"
 local json      = require "cjson"
 local path      = require "path"
-local pp        = require "pp"
 
 local URI           = "ws://127.0.0.1:9001"
 local reportDir     = "./reports/clients"
@@ -27,9 +24,11 @@ function readJson(p)
 end
 
 function cleanDir(p, mask)
-  path.each(path.join(p, mask), function(P)
-    path.remove(P)
-  end)
+  if path.exists(p) then
+    path.each(path.join(p, mask), function(P)
+      path.remove(P)
+    end)
+  end
 end
 
 function cleanReports(p)
@@ -43,6 +42,21 @@ function readReport(dir, agent)
   local t = readJson(p)
   t = t[agent] or {}
   return t
+end
+
+function printReport(name, t)
+  print("","Test case ID " .. name .. ":")
+  for k, v in pairs(t) do
+    print("","",k,"=>",v)
+  end
+  print("-------------")
+end
+
+function printReports(name, t)
+  print(name .. ":")
+  for k, v in pairs(t)do
+    printReport(k, v)
+  end
 end
 
 function isWSEOF(err)
@@ -162,11 +176,11 @@ function runAll()
   end
 
   if next(warnings) then
-    pp("WARNING:", warnings)
+    printReports("WARNING", warnings)
   end
 
   if next(errors) then
-    pp("ERROR:", errors)
+    printReports("ERROR", errors)
     os.exit(-1)
   end
 end
