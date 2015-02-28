@@ -1,3 +1,5 @@
+require "./utils"
+
 local uv        = require "lluv"
 local websocket = require "lluv.websocket"
 local json      = require "cjson"
@@ -47,6 +49,10 @@ function isWSEOF(err)
   return err:name() == 'EOF' and err.cat and err:cat() == 'WEBSOCKET'
 end
 
+function isEOF(err)
+  return err:name() == 'EOF'
+end
+
 function getCaseCount(cont)
   websocket.new():connect(URI .. "/getCaseCount", "echo", function(cli, err)
     if err then
@@ -81,7 +87,7 @@ function runtTestCase(no, cb)
 
     cli:start_read(function(self, err, message, opcode)
       if err then
-        if not isWSEOF(err) then
+        if not isEOF(err) then -- some tests do not make full close handshake(e.g. 3.3)
           print("Client read error:", err)
         end
         return cli:close(cb)
@@ -167,7 +173,7 @@ end
 
 runAll()
 
+-- runtTestCase(1, print)
 
--- runtTestCase(3, print)
--- uv.run()
+uv.run()
 

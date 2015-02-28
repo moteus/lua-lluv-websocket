@@ -337,11 +337,12 @@ function WSSocket:_close(clean, code, reason, cb)
     self._sock:close()
   end
 
-  self._sock = nil
+  self._state, self._sock = 'CLOSED'
 end
 
 local function start_close_timer(self, timeout)
   assert(not self._timer)
+  assert(self._state == 'WAIT_CLOSE')
   self._timer = uv.timer():start((timeout or 3) * 1000, function()
     self:_close(false, 1006, 'timeout', self._on_close)
   end)
@@ -432,7 +433,9 @@ local on_data = function(self, data, cb)
       local f, c = tconcat(self._frames), self._opcode
       self._frames, self._opcode = {}
 
-      if c == CLOSE then
+      if (self._state == 'WAIT_DATA') and (rsv1 or rsv2 or rsv3) then
+        protocol_error(self, "Invalid reserved bit", cb)
+      elseif c == CLOSE then
         self._code, self._reason = frame.decode_close(f)
 
         if self._state == 'WAIT_CLOSE' then
@@ -461,10 +464,9 @@ local on_data = function(self, data, cb)
         cb(self, WSError_EOF(self._code, self._reason))
       elseif self._state == 'WAIT_DATA' then
         if rsv1 or rsv2 or rsv3 then
+          assert(false, "Never get here")
           protocol_error(self, "Invalid reserved bit", cb)
-        end
-
-        if c == PING then
+        elseif c == PING then
           if #f >= 126 then
             protocol_error(self, "Too long payload", cb)
           else
@@ -486,6 +488,13 @@ function WSSocket:_start_read(cb)
     if err then
       self:_stop_read()
       self._sock:shutdown()
+
+      if self._state == 'WAIT_CLOSE' then
+        self:_close(false, self._code, self._reason, self._on_close)
+      else
+        self._state = 'CLOSED'
+      end
+
       return cb(self, err)
     end
 
