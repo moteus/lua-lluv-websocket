@@ -437,6 +437,18 @@ local validate_frame = function(self, cb, decoded, fin, opcode, masked, rsv1, rs
   return true
 end
 
+local CLOSE_CODES = {
+  [1000] = true;
+  [1001] = true;
+  [1002] = true;
+  [1003] = true;
+  [1007] = true;
+  [1008] = true;
+  [1009] = true;
+  [1010] = true;
+  [1011] = true;
+}
+
 local on_control = function(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
   if not fin then
     if self._state == 'WAIT_DATA' then
@@ -447,6 +459,13 @@ local on_control = function(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, 
 
   if opcode == CLOSE then
     self._code, self._reason = frame.decode_close(decoded)
+    local ncode = tonumber(self._code)
+
+    if (not ncode or ncode < 1000)
+      or (ncode <  3000 and not CLOSE_CODES[ncode])
+    then
+      self._code, self._reason = 1002, 'Invalid status code'
+    end
 
     if self._state == 'WAIT_CLOSE' then
       return self:_close(true, self._code, self._reason, self._on_close)
