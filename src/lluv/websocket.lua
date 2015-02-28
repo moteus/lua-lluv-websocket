@@ -370,7 +370,7 @@ function WSSocket:close(code, reason, cb)
   end
 
   if self._state == 'CLOSED' then
-    return self:_close(true, self._code, self._reason, self._on_close)
+    return self:_close(true, self._code, self._reason, cb)
   end
 
   -- IO error or interrupted connection
@@ -411,16 +411,25 @@ end
 
 local function protocol_error(self, msg, read_cb, shutdown)
   self._code, self._reason = 1002, msg or 'Protocol error'
-  self._state = 'CLOSE_PENDING2'
   local encoded = frame.encode_close(self._code, self._reason)
-  self:write(encoded, CLOSE)
+
+  if shutdown then -- no wait close response
+    self._state = 'CLOSED'
+    self:_stop_read()
+    self:write(encoded, CLOSE, function()
+      if self._sock then self._sock:shutdown() end
+    end)
+  else
+    self._state = 'CLOSE_PENDING2'
+    self:write(encoded, CLOSE)
+  end
 
   return read_cb(self, WSError_EOF(self._code, self._reason))
 end
 
 local validate_frame = function(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
   if rsv1 or rsv2 or rsv3 then -- Invalid frame
-    if self._state == 'WAIT_DATA' then
+      if self._state == 'WAIT_DATA' then
       protocol_error(self, "Invalid reserved bit", cb)
     end
     return false
@@ -491,12 +500,14 @@ local on_data = function(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv
 
   if not self._opcode then
     if opcode == CONTINUATION then
-      assert(false, "FIXME protocolo error and connection shutdown without hendshake")
+      return protocol_error(self, "Unexpected continuation frame", cb, true)
     else
       self._frames, self._opcode = {}, opcode
     end
   else
-    assert(opcode == CONTINUATION, "FIXME protocolo error and connection shutdown without hendshake")
+    if opcode ~= CONTINUATION then
+      return protocol_error(self, "Unexpected data frame", cb, true)
+    end
   end
 
   tappend(self._frames, decoded)
