@@ -34,10 +34,10 @@ script:
   - lua test.lua
   - wstest -m fuzzingserver &
   - sleep 5
-  - lua ./autobahn_client_test.lua
+  - lua -lluacov ./autobahn_client_test.lua
 
-# after_success:
-#   - luacov-coveralls -j c.report.json
+after_success:
+  - luacov-coveralls -v
 
 notifications:
   email:
