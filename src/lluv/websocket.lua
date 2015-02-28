@@ -458,13 +458,17 @@ local on_control = function(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, 
   end
 
   if opcode == CLOSE then
-    self._code, self._reason = frame.decode_close(decoded)
-    local ncode = tonumber(self._code)
+    if #decoded > 0 then
+      self._code, self._reason = frame.decode_close(decoded)
+      local ncode = tonumber(self._code)
 
-    if (not ncode or ncode < 1000)
-      or (ncode <  3000 and not CLOSE_CODES[ncode])
-    then
-      self._code, self._reason = 1002, 'Invalid status code'
+      if (not ncode or ncode < 1000)
+        or (ncode <  3000 and not CLOSE_CODES[ncode])
+      then
+        self._code, self._reason = 1002, 'Invalid status code'
+      end
+    else
+      self._code, self._reason = 1000, ''
     end
 
     if self._state == 'WAIT_CLOSE' then
