@@ -1,10 +1,47 @@
 local uv        = require "lluv"
 local websocket = require "lluv.websocket"
+local json      = require "cjson"
+local path      = require "path"
+local pp        = require "pp"
 
 local URI           = "ws://127.0.0.1:9001"
+local reportDir     = "./reports/clients"
 local agent         = "lluv-websocket"
 local caseCount     = 0
 local currentCaseId = 0
+local errors        = {}
+local warnings      = {}
+
+function readFile(p)
+  p = path.fullpath(p)
+  local f = assert(io.open(p, 'rb'))
+  local d = f:read("*a")
+  f:close()
+  return d
+end
+
+function readJson(p)
+  return json.decode(readFile(p))
+end
+
+function cleanDir(p, mask)
+  path.each(path.join(p, mask), function(P)
+    path.remove(P)
+  end)
+end
+
+function cleanReports(p)
+  cleanDir(p, "*.json")
+  cleanDir(p, "*.html")
+end
+
+function readReport(dir, agent)
+  local p = path.join(dir, "index.json")
+  if not path.exists(p) then return end
+  local t = readJson(p)
+  t = t[agent] or {}
+  return t
+end
 
 function isWSEOF(err)
   return err:name() == 'EOF' and err.cat and err:cat() == 'WEBSOCKET'
@@ -95,20 +132,42 @@ function updateReports()
           print("Test suite finished!");
         end)
       end
+
+      print("Report:", message)
     end)
   end)
 end
 
 function runAll()
   currentCaseId = 1
+  cleanReports(reportDir)
   getCaseCount(runNextCase)
   uv.run()
   updateReports()
+  uv.run()
+
+  local report = readReport(reportDir, agent)
+  for name, result in pairs(report) do
+    if result.behavior ~= 'OK' then
+      errors[name] = result
+    elseif result.behaviorClose ~= 'OK' then
+      warnings[name] = result
+    end
+  end
+
+  if next(warnings) then
+    pp("WARNING:", warnings)
+  end
+
+  if next(errors) then
+    pp("ERROR:", errors)
+    os.exit(-1)
+  end
 end
 
 runAll()
 
--- runtTestCase(1, print)
 
-uv.run()
+-- runtTestCase(3, print)
+-- uv.run()
 
