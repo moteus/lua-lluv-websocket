@@ -34,6 +34,10 @@ local function is_valid_fin_opcode(c)
          c == CLOSE
 end
 
+local function is_data_opcode(c)
+  return c == TEXT or c == BINARY or c == CONTINUATION
+end
+
 local tconcat   = table.concat
 local tappend   = function(t, v) t[#t + 1] = v return t end
 
@@ -405,7 +409,7 @@ function WSSocket:close(code, reason, cb)
   end
 end
 
-local function protocol_error(self, msg, read_cb)
+local function protocol_error(self, msg, read_cb, shutdown)
   self._code, self._reason = 1002, msg or 'Protocol error'
   self._state = 'CLOSE_PENDING2'
   local encoded = frame.encode_close(self._code, self._reason)
@@ -414,71 +418,112 @@ local function protocol_error(self, msg, read_cb)
   return read_cb(self, WSError_EOF(self._code, self._reason))
 end
 
-local on_data = function(self, data, cb)
-  local encoded = (self._tail or '') .. data
-  while self._sock and self._reading do
-    local decoded, fin, opcode, rest, _, rsv1, rsv2, rsv3 = frame.decode(encoded)
-
-    
-    if not decoded then break end
-    if not self._opcode then self._opcode = opcode
-    else
-      --! @todo shutdown
-      assert(opcode == CONTINUATION, tostring(opcode))
+local validate_frame = function(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
+  if rsv1 or rsv2 or rsv3 then -- Invalid frame
+    if self._state == 'WAIT_DATA' then
+      protocol_error(self, "Invalid reserved bit", cb)
     end
-    tappend(self._frames, decoded)
-    encoded = rest
+    return false
+  end
+  return true
+end
 
-    if fin == true then
-      local f, c = tconcat(self._frames), self._opcode
-      self._frames, self._opcode = {}
+local on_control = function(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
+  if not fin then
+    if self._state == 'WAIT_DATA' then
+      protocol_error(self, "Fragmented control", cb)
+    end
+    return
+  end
 
-      if (self._state == 'WAIT_DATA') and (rsv1 or rsv2 or rsv3) then
-        protocol_error(self, "Invalid reserved bit", cb)
-      elseif c == CLOSE then
-        self._code, self._reason = frame.decode_close(f)
+  if opcode == CLOSE then
+    self._code, self._reason = frame.decode_close(decoded)
 
-        if self._state == 'WAIT_CLOSE' then
-          return self:_close(true, self._code, self._reason, self._on_close)
-        end
+    if self._state == 'WAIT_CLOSE' then
+      return self:_close(true, self._code, self._reason, self._on_close)
+    end
 
-        if self._state == 'CLOSE_PENDING2' then
-          self._state = 'CLOSED'
-          self._sock:_stop_read():shutdown()
-          return
-        end
+    if self._state == 'CLOSE_PENDING2' then
+      self._state = 'CLOSED'
+      self._sock:_stop_read():shutdown()
+      return --! @todo break decode loop in on_raw_data
+    end
 
-        self._state = 'CLOSE_PENDING'
+    self._state = 'CLOSE_PENDING'
 
-        local encoded = frame.encode_close(self._code, self._reason)
-        self:write(encoded, CLOSE, function(self, err)
-          if self._state == 'CLOSE_PENDING' then
-            -- we did not call `close` yet so we just wait
-            self._state = 'CLOSED'
-          elseif self._state == 'WAIT_CLOSE' then
-            -- we call `close` but timeout is not expire
-            return self:_close(true, self._code, self._reason, self._on_close)
-          end
-        end)
+    local encoded = frame.encode_close(self._code, self._reason)
+    self:write(encoded, CLOSE, function(self, err)
+      if self._state == 'CLOSE_PENDING' then
+        -- we did not call `close` yet so we just wait
+        self._state = 'CLOSED'
+      elseif self._state == 'WAIT_CLOSE' then
+          -- we call `close` but timeout is not expire
+        return self:_close(true, self._code, self._reason, self._on_close)
+      end
+    end)
 
-        cb(self, WSError_EOF(self._code, self._reason))
-      elseif self._state == 'WAIT_DATA' then
-        if rsv1 or rsv2 or rsv3 then
-          assert(false, "Never get here")
-          protocol_error(self, "Invalid reserved bit", cb)
-        elseif c == PING then
-          if #f >= 126 then
-            protocol_error(self, "Too long payload", cb)
-          else
-            self:write(f, PONG)
-          end
-        elseif not is_valid_fin_opcode(c) then
-          protocol_error(self, "Invalid opcode", cb)
-        else
-          cb(self, nil, f, c, true)
-        end
+    return cb(self, WSError_EOF(self._code, self._reason))
+  elseif opcode == PING then
+    if self._state == 'WAIT_DATA' then
+      if #decoded >= 126 then
+        protocol_error(self, "Too long payload", cb)
+      else
+        self:write(decoded, PONG)
       end
     end
+  elseif opcode == PONG then
+    if self._state == 'WAIT_DATA' then
+      cb(self, nil, decoded, opcode, true)
+    end
+  else
+    if self._state == 'WAIT_DATA' then
+      protocol_error(self, "Invalid opcode", cb)
+    end
+  end
+
+end
+
+local on_data = function(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
+  if self._state ~= 'WAIT_DATA' then
+    self._frames, self._opcode = nil
+    return
+  end
+
+  if not self._opcode then
+    if opcode == CONTINUATION then
+      assert(false, "FIXME protocolo error and connection shutdown without hendshake")
+    else
+      self._frames, self._opcode = {}, opcode
+    end
+  else
+    assert(opcode == CONTINUATION, "FIXME protocolo error and connection shutdown without hendshake")
+  end
+
+  tappend(self._frames, decoded)
+
+  if fin == true then
+    local f, c = tconcat(self._frames), self._opcode
+    self._frames, self._opcode = nil
+
+    cb(self, nil, f, c, true)
+  end
+end
+
+local on_raw_data = function(self, data, cb)
+  local encoded = (self._tail or '') .. data
+  -- print("TAIL:", hex(self._tail))
+  -- print("DATA:", hex(data))
+  while self._sock and self._reading do
+    local decoded, fin, opcode, rest, masked, rsv1, rsv2, rsv3 = frame.decode(encoded)
+
+    if not decoded then break end
+    -- print("RX>", self._state, decoded, fin, opcode, rsv1, rsv2, rsv3 )
+
+    if validate_frame(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3) then
+      local handler = is_data_opcode(opcode) and on_data or on_control
+      handler(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
+    end
+    encoded = rest
   end
   self._tail = encoded
 end
@@ -498,13 +543,13 @@ function WSSocket:_start_read(cb)
       return cb(self, err)
     end
 
-    on_data(self, data, cb)
+    on_raw_data(self, data, cb)
   end)
 
   self._reading = true
 
   if self._tail and #self._tail > 0 then
-    uv.defer(on_data, self, '', cb)
+    uv.defer(on_raw_data, self, '', cb)
   end
 
   return self
