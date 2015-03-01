@@ -3,7 +3,17 @@ local websocket = require "lluv.websocket"
 local json      = require "cjson"
 local path      = require "path"
 
-local URI           = "ws://127.0.0.1:9001"
+local ctx do
+  local ok, ssl = pcall(require, "lluv.ssl")
+  if ok then
+    ctx = assert(ssl.context{
+      protocol    = "tlsv1",
+      certificate = "./wss/server.crt",
+    })
+  end
+end
+
+local URI           = arg[1] or "ws://127.0.0.1:9001"
 local reportDir     = "./reports/clients"
 local agent         = "lluv-websocket"
 local caseCount     = 0
@@ -68,7 +78,7 @@ function isEOF(err)
 end
 
 function getCaseCount(cont)
-  websocket.new():connect(URI .. "/getCaseCount", "echo", function(cli, err)
+  websocket.new{ssl = ctx}:connect(URI .. "/getCaseCount", "echo", function(cli, err)
     if err then
       print("Client connect error:", err)
       return cli:close()
@@ -91,7 +101,7 @@ end
 function runtTestCase(no, cb)
   local ws_uri = URI .. "/runCase?case=" .. no .. "&agent=" .. agent
 
-  websocket.new():connect(ws_uri, "echo", function(cli, err)
+  websocket.new{ssl = ctx}:connect(ws_uri, "echo", function(cli, err)
     if err then
       print("Client connect error:", err)
       return cli:close()
@@ -133,7 +143,7 @@ end
 function updateReports()
   local ws_uri = URI .. "/updateReports?agent=" .. agent
 
-  websocket.new():connect(ws_uri, "echo", function(cli, err)
+  websocket.new{ssl = ctx}:connect(ws_uri, "echo", function(cli, err)
     if err then
       print("Client connect error:", err)
       return cli:close()

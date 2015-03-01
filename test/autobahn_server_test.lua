@@ -1,5 +1,12 @@
 local uv  = require"lluv"
 local ws  = require"lluv.websocket"
+local ssl = require"lluv.ssl"
+
+local ctx = ssl.context{
+  protocol    = "tlsv1",
+  key         = "./wss/server.key",
+  certificate = "./wss/server.crt",
+}
 
 local server = ws.new{ssl = ctx}
 server:bind("127.0.0.1", 9001, function(self, err)
