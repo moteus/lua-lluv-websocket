@@ -156,7 +156,6 @@ end
 
 local function dns_request(host, cb)
   uv.getaddrinfo(host, port, {
-    family   = "inet";
     socktype = "stream";
     protocol = "tcp";
   }, cb)
