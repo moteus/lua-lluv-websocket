@@ -157,14 +157,16 @@ function WSSocket:__init(opt, s)
   opt = opt or {}
 
   self._sock      = s or uv.tcp()
-  self._frames    = {}
-  self._opcode    = nil
-  self._tail      = nil
-  self._origin    = nil
-  self._ready     = nil
-  self._state     = 'CLOSED' -- no connection
-  self._timeout   = opt.timeout
-  self._protocols = opt.protocols
+  self._frames      = {}
+  self._opcode      = nil
+  self._buffer      = nil
+  self._buffer_size = nil
+  self._wait_size   = nil
+  self._origin      = nil
+  self._ready       = nil
+  self._state       = 'CLOSED' -- no connection
+  self._timeout     = opt.timeout
+  self._protocols   = opt.protocols
 
   if opt.ssl then
     if type(opt.ssl.server) == 'function' then
@@ -302,7 +304,10 @@ function WSSocket:_client_handshake(key, req, cb)
       return cb(self, err)
     end
 
-    self._tail   = buffer:read("*a")
+    local data        = buffer:read_all()
+    self._buffer      = buffer:append(data)
+    self._buffer_size = #data
+
     self._ready  = true
     self._state  = "WAIT_DATA"
     self._masked = true
@@ -365,7 +370,10 @@ function WSSocket:_server_handshake(cb)
         return cb(self, err)
       end
 
-      self._tail   = buffer:read("*a")
+      local data        = buffer:read_all()
+      self._buffer      = buffer:append(data)
+      self._buffer_size = #data
+
       self._ready  = true
       self._state  = "WAIT_DATA"
       self._masked = false
@@ -600,12 +608,52 @@ local on_data = function(self, mode, cb, decoded, fin, opcode, masked, rsv1, rsv
   end
 end
 
+-- local function test_decode_bug_size()
+--  local ok, n = frame.decode('\0')
+--  assert(ok == nil and n == 1)
+-- end
+
+-- test_decode_bug_size()
+
 local on_raw_data = function(self, data, cb, mode)
-  local encoded = (self._tail or '') .. data
+  self._buffer:append(data)
+  self._buffer_size = self._buffer_size + #data
+
+  if self._wait_size and self._buffer_size < self._wait_size then
+    return
+  end
+
+  local encoded = self._buffer:read_some()
+  self._buffer_size = self._buffer_size - #encoded
+
   while self._sock and self._reading do
-    local decoded, fin, opcode, rest, masked, rsv1, rsv2, rsv3 = frame.decode(encoded)
+    local decoded, fin, opcode, rest, masked, rsv1, rsv2, rsv3
+
+    while true do
+      decoded, fin, opcode, rest, masked, rsv1, rsv2, rsv3 = frame.decode(encoded)
+      if decoded then
+        self._wait_size = nil
+        encoded = rest
+        break
+      end
+      assert(fin > 0)
+
+      if self._buffer_size < fin then
+        self._buffer:prepend(encoded)
+        self._buffer_size = self._buffer_size + #encoded
+        self._wait_size = fin + #encoded
+        break
+      end
+
+      local chunk = self._buffer:read_n(fin)
+      self._buffer_size = self._buffer_size - #chunk
+      assert(chunk)
+
+      encoded = encoded .. chunk
+    end
 
     if not decoded then break end
+
     trace("RX>", self._state, frame_name(opcode), fin, masked, text(decoded), rsv1, rsv2, rsv3)
 
     if validate_frame(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3) then
@@ -614,7 +662,6 @@ local on_raw_data = function(self, data, cb, mode)
     end
     encoded = rest
   end
-  self._tail = encoded
 end
 
 function WSSocket:_start_read(mode, cb)
@@ -645,7 +692,7 @@ function WSSocket:_start_read(mode, cb)
 
   self._reading = true
 
-  if self._tail and #self._tail > 0 then
+  if not self._buffer:empty() then
     uv.defer(on_raw_data, self, '', cb, mode)
   end
 
