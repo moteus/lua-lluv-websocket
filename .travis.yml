@@ -35,6 +35,7 @@ script:
   - wstest -m fuzzingserver &
   - sleep 5
   - lua -lluacov ./autobahn_client_test.lua
+  - lua -lluacov ./autobahn_server_test.lua
 
 after_success:
   - luacov-coveralls -v
