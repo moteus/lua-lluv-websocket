@@ -24,6 +24,11 @@ before_install:
   - sudo luarocks install luasocket
   - sudo luarocks install lua-websockets-core --server=http://rocks.moonscript.org/dev
   - sudo luarocks install lluv --server=http://rocks.moonscript.org/dev UV_DIR=$TRAVIS_BUILD_DIR/libuv
+  - git clone --depth=1 --recursive https://github.com/zhaozg/lua-openssl.git
+  - cd lua-openssl
+  - sudo luarocks make rockspecs/openssl-scm-1.rockspec
+  - cd $TRAVIS_BUILD_DIR
+  - sudo luarocks install lluv-ssl --server=http://rocks.moonscript.org/dev
 
 install:
   - sudo luarocks make rockspecs/lluv-websocket-scm-0.rockspec
