@@ -177,9 +177,13 @@ function runAll()
   uv.run()
 
   local report = readReport(reportDir, agent)
+  local behavior, behaviorClose = {}, {}
+
   for name, result in pairs(report) do
-    if result.behavior ~= 'OK' then
+    if result.behavior == 'FAILED' then
       errors[name] = result
+    elseif result.behavior == 'WARNING' then
+      warnings[name] = result
     elseif result.behaviorClose ~= 'OK' then
       warnings[name] = result
     end

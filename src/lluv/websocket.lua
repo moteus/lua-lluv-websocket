@@ -26,6 +26,26 @@ local CLOSE        = frame.CLOSE
 local PING         = frame.PING
 local PONG         = frame.PONG
 
+local FRAME_NAMES = {
+  [CONTINUATION ] = 'CONTINUATION';
+  [TEXT         ] = 'TEXT';
+  [BINARY       ] = 'BINARY';
+  [CLOSE        ] = 'CLOSE';
+  [PING         ] = 'PING';
+  [PONG         ] = 'PONG';
+}
+
+local function frame_name(opcode)
+  return FRAME_NAMES[opcode] or "UNKNOWN (" .. tostring(opcode) .. ")"
+end
+
+local function text(msg)
+  if msg then 
+    return string.format("[0x%.8X]", #msg) .. (#msg > 50 and (msg:sub(1, 50) .."...") or msg)
+  end
+  return "nil"
+end
+
 local function is_valid_fin_opcode(c)
   return c == TEXT or
          c == BINARY or
@@ -212,6 +232,9 @@ end
 
 function WSSocket:write(msg, opcode, cb)
   if type(opcode) == 'function' then cb, opcode = opcode end
+
+  -- print("TX>", self._state, frame_name(opcode), true, self._masked, text(msg))
+
   local encoded = frame.encode(msg, opcode or TEXT, self._masked)
   local ok, err
   if not cb then ok, err = self._sock:write(encoded)
@@ -544,13 +567,11 @@ end
 
 local on_raw_data = function(self, data, cb)
   local encoded = (self._tail or '') .. data
-  -- print("TAIL:", hex(self._tail))
-  -- print("DATA:", hex(data))
   while self._sock and self._reading do
     local decoded, fin, opcode, rest, masked, rsv1, rsv2, rsv3 = frame.decode(encoded)
 
     if not decoded then break end
-    -- print("RX>", self._state, decoded, fin, opcode, rsv1, rsv2, rsv3 )
+    -- print("RX>", self._state, frame_name(opcode), fin, masked, text(decoded), rsv1, rsv2, rsv3)
 
     if validate_frame(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3) then
       local handler = is_data_opcode(opcode) and on_data or on_control
