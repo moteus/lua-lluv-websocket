@@ -109,7 +109,7 @@ function runtTestCase(no, cb)
 
     print("Executing test case " .. no .. "/" .. caseCount)
 
-    cli:start_read(function(self, err, message, opcode)
+    cli:start_read("*t", function(self, err, message, opcode)
       if err then
         if not isEOF(err) then -- some tests do not make full close handshake(e.g. 3.3)
           print("Client read error:", err)
@@ -183,6 +183,8 @@ function runAll()
     if result.behavior == 'FAILED' then
       errors[name] = result
     elseif result.behavior == 'WARNING' then
+      warnings[name] = result
+    elseif result.behavior == 'UNIMPLEMENTED' then
       warnings[name] = result
     elseif result.behaviorClose ~= 'OK' then
       warnings[name] = result

@@ -141,15 +141,20 @@ runTest(function()
   if not report then
     exitCode = -2
   else
+    exitCode = 0
+
     for name, result in pairs(report) do
       if result.behavior == 'FAILED' then
         errors[name] = result
       elseif result.behavior == 'WARNING' then
         warnings[name] = result
+      elseif result.behavior == 'UNIMPLEMENTED' then
+        warnings[name] = result
       elseif result.behaviorClose ~= 'OK' then
         warnings[name] = result
       end
     end
+
 
     if next(warnings) then
       printReports("WARNING", warnings)

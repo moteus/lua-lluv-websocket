@@ -10,6 +10,10 @@
 --
 ------------------------------------------------------------------
 
+local trace
+trace = function()end
+-- trace = print
+
 local uv        = require "lluv"
 local ut        = require "lluv.utils"
 local tools     = require "websocket.tools"
@@ -233,9 +237,33 @@ end
 function WSSocket:write(msg, opcode, cb)
   if type(opcode) == 'function' then cb, opcode = opcode end
 
-  -- print("TX>", self._state, frame_name(opcode), true, self._masked, text(msg))
+  opcode = opcode or TEXT
+  local encoded
+  if type(msg) == "table" then
+    if msg[1] then
+      encoded = {
+        frame.encode(msg[1], opcode, self._masked, 1 == #msg)
+      }
 
-  local encoded = frame.encode(msg, opcode or TEXT, self._masked)
+      trace("TX>", self._state, frame_name(opcode), 1 == #msg, self._masked, text(msg[1]))
+
+      for i = 2, #msg do
+        if #msg[i] > 0 then
+          table.insert(encoded,
+            frame.encode(msg[i], CONTINUATION, self._masked, i == #msg)
+          )
+          trace("TX>", self._state, frame_name(opcode), i == #msg, self._masked, text(msg[i]))
+        end
+      end
+    else
+      encoded = frame.encode('', opcode, self._masked)
+      trace("TX>", self._state, frame_name(opcode), true, self._masked, text(''))
+    end
+  else
+    encoded = frame.encode(msg, opcode, self._masked)
+    trace("TX>", self._state, frame_name(opcode), true, self._masked, text(msg))
+  end
+
   local ok, err
   if not cb then ok, err = self._sock:write(encoded)
   else ok, err = self._sock:write(encoded, function(_, ...) cb(self, ...) end) end
@@ -471,7 +499,7 @@ local CLOSE_CODES = {
   [1011] = true;
 }
 
-local on_control = function(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
+local on_control = function(self, mode, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
   if not fin then
     if self._state == 'WAIT_DATA' then
       protocol_error(self, "Fragmented control", cb)
@@ -537,7 +565,7 @@ local on_control = function(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, 
 
 end
 
-local on_data = function(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
+local on_data = function(self, mode, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
   if self._state ~= 'WAIT_DATA' then
     self._frames, self._opcode = nil
     return
@@ -555,34 +583,49 @@ local on_data = function(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv
     end
   end
 
-  tappend(self._frames, decoded)
+  if mode == '*f' then
+    cb(self, nil, decoded, opcode, fin)
+  else
+    if #decoded > 0 then
+      tappend(self._frames, decoded)
+    end
+    if fin == true then
+      local f, c = self._frames, self._opcode
+      self._frames, self._opcode = nil
 
-  if fin == true then
-    local f, c = tconcat(self._frames), self._opcode
-    self._frames, self._opcode = nil
+      if mode == '*s' then f = table.concat(f) end
 
-    cb(self, nil, f, c, true)
+      cb(self, nil, f, c, fin)
+    end
   end
 end
 
-local on_raw_data = function(self, data, cb)
+local on_raw_data = function(self, data, cb, mode)
   local encoded = (self._tail or '') .. data
   while self._sock and self._reading do
     local decoded, fin, opcode, rest, masked, rsv1, rsv2, rsv3 = frame.decode(encoded)
 
     if not decoded then break end
-    -- print("RX>", self._state, frame_name(opcode), fin, masked, text(decoded), rsv1, rsv2, rsv3)
+    trace("RX>", self._state, frame_name(opcode), fin, masked, text(decoded), rsv1, rsv2, rsv3)
 
     if validate_frame(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3) then
       local handler = is_data_opcode(opcode) and on_data or on_control
-      handler(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
+      handler(self, mode, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
     end
     encoded = rest
   end
   self._tail = encoded
 end
 
-function WSSocket:_start_read(cb)
+function WSSocket:_start_read(mode, cb)
+  if type(mode) == 'function' then
+    cb, mode = mode
+  end
+
+  mode = mode or '*s'
+
+  assert(mode == '*t' or mode == '*s' or mode == '*f', mode)
+
   self._sock:start_read(function(sock, err, data)
     if err then
       self:_stop_read()
@@ -597,13 +640,13 @@ function WSSocket:_start_read(cb)
       return cb(self, err)
     end
 
-    on_raw_data(self, data, cb)
+    on_raw_data(self, data, cb, mode)
   end)
 
   self._reading = true
 
   if self._tail and #self._tail > 0 then
-    uv.defer(on_raw_data, self, '', cb)
+    uv.defer(on_raw_data, self, '', cb, mode)
   end
 
   return self
