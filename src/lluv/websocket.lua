@@ -599,7 +599,9 @@ local on_control = function(self, mode, cb, decoded, fin, opcode, masked, rsv1, 
 
     self._state = 'CLOSE_PENDING'
 
-    if self._validator and not self._validator:validate(self._reason or '') then
+    if self._reason and #self._reason > 0 and
+      self._validator and not self._validator:validate(self._reason)
+    then
       self._code, self._reason = 1007, "Invalid UTF8 character"
     end
 
