@@ -127,9 +127,6 @@ end
 
 function runNextCase()
   runtTestCase(currentCaseId, function(_, err, code, reason)
-    if code ~= 1000 then
-      print("Test fail : ", reason)
-    end
     currentCaseId = currentCaseId + 1
     if currentCaseId <= caseCount then
       runNextCase()
@@ -203,7 +200,7 @@ end
 
 runAll()
 
--- runtTestCase(22, print)
+-- runtTestCase(2, print)
 
 uv.run(debug.traceback)
 

@@ -86,6 +86,7 @@ end
 
 function runTest(cb)
 
+  local currentCaseId = 0
   local server = ws.new{ssl = ctx}
   server:bind("127.0.0.1", 9002, function(self, err)
     if err then
@@ -113,7 +114,9 @@ function runTest(cb)
           print("Server handshake error:", err)
           return cli:close()
         end
-        print("New server connection:", protocol)
+
+        currentCaseId = currentCaseId + 1
+        print("Executing test case " .. tostring(currentCaseId))
 
         cli:start_read(function(self, err, message, opcode)
           if err then
