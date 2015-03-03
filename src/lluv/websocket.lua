@@ -219,6 +219,16 @@ function WSSocket:__init(opt, s)
   self._timeout   = opt.timeout
   self._protocols = opt.protocols
 
+  if opt.utf8 then
+    if opt.utf8 == true then
+      self._validator = require"lluv.websocket.utf8".validator()
+    else
+      assert(type(opt.utf8.next)  == 'function')
+      assert(type(opt.utf8.reset) == 'function')
+      self._validator = opt.utf8
+    end
+  end
+
   if opt.ssl then
     if type(opt.ssl.server) == 'function' then
       self._ssl = opt.ssl
@@ -515,8 +525,8 @@ function WSSocket:close(code, reason, cb)
   end
 end
 
-local function protocol_error(self, msg, read_cb, shutdown)
-  self._code, self._reason = 1002, msg or 'Protocol error'
+local function protocol_error(self, code, msg, read_cb, shutdown)
+  self._code, self._reason = code or 1002, msg or 'Protocol error'
   local encoded = frame.encode_close(self._code, self._reason)
 
   if shutdown then -- no wait close response
@@ -536,7 +546,7 @@ end
 local validate_frame = function(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
   if rsv1 or rsv2 or rsv3 then -- Invalid frame
       if self._state == 'WAIT_DATA' then
-      protocol_error(self, "Invalid reserved bit", cb)
+      protocol_error(self, 1002, "Invalid reserved bit", cb)
     end
     return false
   end
@@ -558,7 +568,7 @@ local CLOSE_CODES = {
 local on_control = function(self, mode, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
   if not fin then
     if self._state == 'WAIT_DATA' then
-      protocol_error(self, "Fragmented control", cb)
+      protocol_error(self, 1002, "Fragmented control", cb)
     end
     return
   end
@@ -589,6 +599,10 @@ local on_control = function(self, mode, cb, decoded, fin, opcode, masked, rsv1, 
 
     self._state = 'CLOSE_PENDING'
 
+    if self._validator and not self._validator:validate(self._reason or '') then
+      self._code, self._reason = 1007, "Invalid UTF8 character"
+    end
+
     local encoded = frame.encode_close(self._code, self._reason)
     self:write(encoded, CLOSE, function(self, err)
       if self._state == 'CLOSE_PENDING' then
@@ -604,7 +618,7 @@ local on_control = function(self, mode, cb, decoded, fin, opcode, masked, rsv1, 
   elseif opcode == PING then
     if self._state == 'WAIT_DATA' then
       if #decoded >= 126 then
-        protocol_error(self, "Too long payload", cb)
+        protocol_error(self, 1002, "Too long payload", cb)
       else
         self:write(decoded, PONG)
       end
@@ -615,7 +629,7 @@ local on_control = function(self, mode, cb, decoded, fin, opcode, masked, rsv1, 
     end
   else
     if self._state == 'WAIT_DATA' then
-      protocol_error(self, "Invalid opcode", cb)
+      protocol_error(self, 1002, "Invalid opcode", cb)
     end
   end
 
@@ -629,13 +643,19 @@ local on_data = function(self, mode, cb, decoded, fin, opcode, masked, rsv1, rsv
 
   if not self._opcode then
     if opcode == CONTINUATION then
-      return protocol_error(self, "Unexpected continuation frame", cb, true)
+      return protocol_error(self, 1002, "Unexpected continuation frame", cb, true)
     else
       self._frames, self._opcode = {}, opcode
     end
   else
     if opcode ~= CONTINUATION then
-      return protocol_error(self, "Unexpected data frame", cb, true)
+      return protocol_error(self, 1002, "Unexpected data frame", cb, true)
+    end
+  end
+
+  if self._validator and self._opcode == TEXT then
+    if not self._validator:next(decoded, fin) then
+      return protocol_error(self, 1007, "Invalid UTF8 character", cb)
     end
   end
 
@@ -775,7 +795,10 @@ function WSSocket:accept()
   local cli, err = self._sock:accept()
   if not cli then return nil, err end
   if self._ssl then cli = assert(self._ssl:server(cli)) end
-  return WSSocket.new({protocols = self._protocols}, cli)
+  return WSSocket.new({
+    protocols = self._protocols;
+    utf8      = self._validator.new();
+  }, cli)
 end
 
 function WSSocket:listen(protocols, cb)

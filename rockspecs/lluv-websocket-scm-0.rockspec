@@ -22,6 +22,8 @@ build = {
   type = "builtin",
 
   modules = {
-    ['lluv.websocket'] = 'src/lluv/websocket.lua',
+    ['lluv.websocket']                = 'src/lluv/websocket.lua',
+    ['lluv.websocket.utf8']           = 'src/lluv/websocket/utf8.lua',
+    ['lluv.websocket.utf8_validator'] = 'src/lluv/websocket/utf8_validator.lua',
   }
 }

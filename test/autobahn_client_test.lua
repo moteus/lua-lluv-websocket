@@ -101,7 +101,7 @@ end
 function runtTestCase(no, cb)
   local ws_uri = URI .. "/runCase?case=" .. no .. "&agent=" .. agent
 
-  websocket.new{ssl = ctx}:connect(ws_uri, "echo", function(cli, err)
+  websocket.new{ssl = ctx, utf8 = true}:connect(ws_uri, "echo", function(cli, err)
     if err then
       print("Client connect error:", err)
       return cli:close()
@@ -200,7 +200,7 @@ end
 
 runAll()
 
--- runtTestCase(2, print)
+-- runtTestCase(10, print)
 
 uv.run(debug.traceback)
 

@@ -13,6 +13,7 @@ local ctx do
     })
   end
 end
+ctx = nil
 
 local reportDir = "./reports/servers"
 local agent     = "lluv-websocket"
@@ -87,7 +88,7 @@ end
 function runTest(cb)
 
   local currentCaseId = 0
-  local server = ws.new{ssl = ctx}
+  local server = ws.new{ssl = ctx, utf8 = true}
   server:bind("127.0.0.1", 9002, function(self, err)
     if err then
       print("Server error:", err)
