@@ -50,14 +50,6 @@ local function text(msg)
   return "nil"
 end
 
-local function is_valid_fin_opcode(c)
-  return c == TEXT or
-         c == BINARY or
-         c == PING or
-         c == PONG or
-         c == CLOSE
-end
-
 local function is_data_opcode(c)
   return c == TEXT or c == BINARY or c == CONTINUATION
 end
