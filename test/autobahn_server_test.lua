@@ -13,7 +13,6 @@ local ctx do
     })
   end
 end
-ctx = nil
 
 local reportDir = "./reports/servers"
 local agent     = "lluv-websocket"
