@@ -6,7 +6,7 @@
 --
 --  Licensed according to the included 'LICENSE' document
 --
---  This file is part of lua-lluv-ssl library.
+--  This file is part of lua-lluv-websocket library.
 --
 ------------------------------------------------------------------
 
