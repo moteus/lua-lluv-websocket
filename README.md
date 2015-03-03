@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/moteus/lua-lluv-websocket.svg?branch=master)](https://travis-ci.org/moteus/lua-lluv-websocket)
 [![Coverage Status](https://coveralls.io/repos/moteus/lua-lluv-websocket/badge.svg?branch=master)](https://coveralls.io/r/moteus/lua-lluv-websocket?branch=master)
 
-This library includes stream interface for lluv and lluv backend for lua-websockets
+This library includes stream interface for lluv and lluv backend for [lua-websockets](https://github.com/lipp/lua-websockets)
 
 ```Lua
 local cli = ws.new()
