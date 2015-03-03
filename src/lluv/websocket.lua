@@ -129,6 +129,66 @@ local function WSError_ENOSUP(msg)
   return WSError.new(WSError.ENOSUP, nil, msg)
 end
 
+local SizedBuffer = ut.class(ut.Buffer) do
+local base = SizedBuffer.__base
+
+function SizedBuffer:__init(buffer)
+  assert(base.__init(self))
+  self._size = 0
+
+  while true do
+    local chunk = buffer:read_some()
+    if not chunk then break end
+    self:append(chunk)
+  end
+
+  return self
+end
+
+function SizedBuffer:read_line(...)
+  error('Unsupported method')
+end
+
+function SizedBuffer:read_n(...)
+  local data = base.read_n(self, ...)
+  if data then self._size = self._size - #data end
+  return data
+end
+
+function SizedBuffer:read_some(...)
+  local data = base.read_some(self, ...)
+  if data then self._size = self._size - #data end
+  return data
+end
+
+function SizedBuffer:read_all(...)
+  local data = base.read_all(self, ...)
+  if data then self._size = self._size - #data end
+  return data
+end
+
+function SizedBuffer:append(data)
+  if data then
+    self._size = self._size + #data
+    base.append(self, data)
+  end
+  return self
+end
+
+function SizedBuffer:prepend(data)
+  if data then
+    self._size = self._size + #data
+    base.append(self, data)
+  end
+  return self
+end
+
+function SizedBuffer:size()
+  return self._size
+end
+
+end
+
 local WSSocket = ut.class() do
 
 -- State:
@@ -157,16 +217,15 @@ function WSSocket:__init(opt, s)
   opt = opt or {}
 
   self._sock      = s or uv.tcp()
-  self._frames      = {}
-  self._opcode      = nil
-  self._buffer      = nil
-  self._buffer_size = nil
-  self._wait_size   = nil
-  self._origin      = nil
-  self._ready       = nil
-  self._state       = 'CLOSED' -- no connection
-  self._timeout     = opt.timeout
-  self._protocols   = opt.protocols
+  self._frames    = {}
+  self._opcode    = nil
+  self._origin    = nil
+  self._ready     = nil
+  self._state     = 'CLOSED' -- no connection
+  self._buffer    = nil
+  self._wait_size = nil
+  self._timeout   = opt.timeout
+  self._protocols = opt.protocols
 
   if opt.ssl then
     if type(opt.ssl.server) == 'function' then
@@ -243,27 +302,28 @@ function WSSocket:write(msg, opcode, cb)
   local encoded
   if type(msg) == "table" then
     if msg[1] then
+      trace("TX>", self._state, frame_name(opcode), 1 == #msg, self._masked, text(msg[1]))
+
       encoded = {
         frame.encode(msg[1], opcode, self._masked, 1 == #msg)
       }
 
-      trace("TX>", self._state, frame_name(opcode), 1 == #msg, self._masked, text(msg[1]))
-
       for i = 2, #msg do
         if #msg[i] > 0 then
+          trace("TX>", self._state, frame_name(opcode), i == #msg, self._masked, text(msg[i]))
+
           table.insert(encoded,
             frame.encode(msg[i], CONTINUATION, self._masked, i == #msg)
           )
-          trace("TX>", self._state, frame_name(opcode), i == #msg, self._masked, text(msg[i]))
         end
       end
     else
-      encoded = frame.encode('', opcode, self._masked)
       trace("TX>", self._state, frame_name(opcode), true, self._masked, text(''))
+      encoded = frame.encode('', opcode, self._masked)
     end
   else
-    encoded = frame.encode(msg, opcode, self._masked)
     trace("TX>", self._state, frame_name(opcode), true, self._masked, text(msg))
+    encoded = frame.encode(msg, opcode, self._masked)
   end
 
   local ok, err
@@ -304,9 +364,7 @@ function WSSocket:_client_handshake(key, req, cb)
       return cb(self, err)
     end
 
-    local data        = buffer:read_all()
-    self._buffer      = buffer:append(data)
-    self._buffer_size = #data
+    self._buffer = SizedBuffer.new(buffer)
 
     self._ready  = true
     self._state  = "WAIT_DATA"
@@ -370,9 +428,7 @@ function WSSocket:_server_handshake(cb)
         return cb(self, err)
       end
 
-      local data        = buffer:read_all()
-      self._buffer      = buffer:append(data)
-      self._buffer_size = #data
+      self._buffer = SizedBuffer.new(buffer)
 
       self._ready  = true
       self._state  = "WAIT_DATA"
@@ -615,42 +671,38 @@ end
 
 -- test_decode_bug_size()
 
+local function next_frame(self)
+  local encoded = self._buffer:read_some()
+
+  while encoded do
+    local decoded, fin, opcode, rest, masked, rsv1, rsv2, rsv3 = frame.decode(encoded)
+    if decoded then
+      self._wait_size = nil
+      self._buffer:prepend(rest)
+      return decoded, fin, opcode, masked, rsv1, rsv2, rsv3
+    end
+
+    if self._buffer:size() < fin then
+      self._buffer:prepend(encoded)
+      self._wait_size = fin + #encoded
+      return
+    end
+
+    local chunk = self._buffer:read_n(fin)
+
+    encoded = encoded .. chunk
+  end
+end
+
 local on_raw_data = function(self, data, cb, mode)
   self._buffer:append(data)
-  self._buffer_size = self._buffer_size + #data
 
-  if self._wait_size and self._buffer_size < self._wait_size then
+  if self._wait_size and self._buffer:size() < self._wait_size then
     return
   end
 
-  local encoded = self._buffer:read_some()
-  self._buffer_size = self._buffer_size - #encoded
-
   while self._sock and self._reading do
-    local decoded, fin, opcode, rest, masked, rsv1, rsv2, rsv3
-
-    while true do
-      decoded, fin, opcode, rest, masked, rsv1, rsv2, rsv3 = frame.decode(encoded)
-      if decoded then
-        self._wait_size = nil
-        encoded = rest
-        break
-      end
-      assert(fin > 0)
-
-      if self._buffer_size < fin then
-        self._buffer:prepend(encoded)
-        self._buffer_size = self._buffer_size + #encoded
-        self._wait_size = fin + #encoded
-        break
-      end
-
-      local chunk = self._buffer:read_n(fin)
-      self._buffer_size = self._buffer_size - #chunk
-      assert(chunk)
-
-      encoded = encoded .. chunk
-    end
+    local decoded, fin, opcode, masked, rsv1, rsv2, rsv3 = next_frame(self)
 
     if not decoded then break end
 
@@ -660,7 +712,6 @@ local on_raw_data = function(self, data, cb, mode)
       local handler = is_data_opcode(opcode) and on_data or on_control
       handler(self, mode, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
     end
-    encoded = rest
   end
 end
 

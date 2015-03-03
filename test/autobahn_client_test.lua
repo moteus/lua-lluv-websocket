@@ -172,9 +172,9 @@ function runAll()
   currentCaseId = 1
   cleanReports(reportDir)
   getCaseCount(runNextCase)
-  uv.run()
+  uv.run(debug.traceback)
   updateReports()
-  uv.run()
+  uv.run(debug.traceback)
 
   local report = readReport(reportDir, agent)
   local behavior, behaviorClose = {}, {}
@@ -203,7 +203,7 @@ end
 
 runAll()
 
--- runtTestCase(1, print)
+-- runtTestCase(22, print)
 
-uv.run()
+uv.run(debug.traceback)
 
