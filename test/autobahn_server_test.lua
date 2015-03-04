@@ -178,7 +178,7 @@ runTest(function()
         warnings[name] = result
       elseif result.behavior == 'UNIMPLEMENTED' then
         warnings[name] = result
-      elseif result.behaviorClose ~= 'OK' then
+      elseif result.behaviorClose ~= 'OK' and result.behaviorClose ~= 'INFORMATIONAL' then
         warnings[name] = result
       end
     end

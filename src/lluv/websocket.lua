@@ -10,9 +10,7 @@
 --
 ------------------------------------------------------------------
 
-local trace
-trace = function()end
--- trace = print
+local trace -- = print
 
 local uv        = require "lluv"
 local ut        = require "lluv.utils"
@@ -47,7 +45,18 @@ local function text(msg)
   if msg then 
     return string.format("[0x%.8X]", #msg) .. (#msg > 50 and (msg:sub(1, 50) .."...") or msg)
   end
-  return "nil"
+  return "[   NULL   ]"
+end
+
+local function hex(msg)
+  if msg then
+    return string.format("[0x%.8X]", #msg) .. 
+      string.gsub(msg:sub(1, 50), ".", function(ch)
+        return string.format("%.2x ", string.byte(ch))
+      end) ..
+      (#msg > 50 and "..." or "")
+  end
+  return "[   NULL   ]"
 end
 
 local function is_data_opcode(c)
@@ -304,7 +313,7 @@ function WSSocket:write(msg, opcode, cb)
   local encoded
   if type(msg) == "table" then
     if msg[1] then
-      trace("TX>", self._state, frame_name(opcode), 1 == #msg, self._masked, text(msg[1]))
+      if trace then trace("TX>", self._state, frame_name(opcode), 1 == #msg, self._masked, text(msg[1])) end
 
       encoded = {
         frame.encode(msg[1], opcode, self._masked, 1 == #msg)
@@ -312,7 +321,7 @@ function WSSocket:write(msg, opcode, cb)
 
       for i = 2, #msg do
         if #msg[i] > 0 then
-          trace("TX>", self._state, frame_name(opcode), i == #msg, self._masked, text(msg[i]))
+          if trace then trace("TX>", self._state, frame_name(opcode), i == #msg, self._masked, text(msg[i])) end
 
           table.insert(encoded,
             frame.encode(msg[i], CONTINUATION, self._masked, i == #msg)
@@ -320,11 +329,11 @@ function WSSocket:write(msg, opcode, cb)
         end
       end
     else
-      trace("TX>", self._state, frame_name(opcode), true, self._masked, text(''))
+      if trace then trace("TX>", self._state, frame_name(opcode), true, self._masked, text('')) end
       encoded = frame.encode('', opcode, self._masked)
     end
   else
-    trace("TX>", self._state, frame_name(opcode), true, self._masked, text(msg))
+    if trace then trace("TX>", self._state, frame_name(opcode), true, self._masked, text(msg)) end
     encoded = frame.encode(msg, opcode, self._masked)
   end
 
@@ -353,10 +362,14 @@ function WSSocket:_client_handshake(key, req, cb)
       return cb(self, err)
     end
 
+    if trace then trace("WS HS RX>", hex(data)) end
+
     buffer:append(data)
     local response = buffer:read("*l")
     if not response then return end
     sock:stop_read()
+
+    if trace then trace("WS HS >", "stop read") end
 
     local headers = handshake.http_headers(response .. '\r\n\r\n')
     if headers['sec-websocket-accept'] ~= expected_accept then
@@ -367,6 +380,8 @@ function WSSocket:_client_handshake(key, req, cb)
     end
 
     self._buffer = SizedBuffer.new(buffer)
+
+    if trace then trace("WS HS DONE>", "buffer size:", self._buffer:size()) end
 
     self._ready  = true
     self._state  = "WAIT_DATA"
@@ -709,18 +724,16 @@ local function next_frame(self)
 end
 
 local on_raw_data = function(self, data, cb, mode)
-  self._buffer:append(data)
-
   if self._wait_size and self._buffer:size() < self._wait_size then
     return
   end
 
-  while self._sock and self._reading do
+  while self._sock and self._read_cb == cb do
     local decoded, fin, opcode, masked, rsv1, rsv2, rsv3 = next_frame(self)
 
     if not decoded then break end
 
-    trace("RX>", self._state, frame_name(opcode), fin, masked, text(decoded), rsv1, rsv2, rsv3)
+    if trace then trace("RX>", self._state, frame_name(opcode), fin, masked, text(decoded), rsv1, rsv2, rsv3) end
 
     if validate_frame(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3) then
       local handler = is_data_opcode(opcode) and on_data or on_control
@@ -738,8 +751,19 @@ function WSSocket:_start_read(mode, cb)
 
   assert(mode == '*t' or mode == '*s' or mode == '*f', mode)
 
-  self._sock:start_read(function(sock, err, data)
+  assert(cb)
+
+  local function do_read(cli, err, data)
+    if data then
+      if trace then trace("WS RAW RX>", os.time(), self._state, cb, self._buffer:size(), self._wait_size, hex(data)) end
+      self._buffer:append(data)
+    end
+
+    if self._read_cb ~= cb then return end
+
     if err then
+      if trace then trace("WS RAW RX>", os.time(), self._state, cb, err) end
+
       self:_stop_read()
       self._sock:shutdown()
 
@@ -749,17 +773,24 @@ function WSSocket:_start_read(mode, cb)
         self._state = 'CLOSED'
       end
 
-      return cb(self, err)
+      return self._read_cb(self, err)
     end
 
     on_raw_data(self, data, cb, mode)
-  end)
+  end
 
-  self._reading = true
+  if self._read_cb then
+    if self._read_cb == cb then return end
+    self:_stop_read()
+  end
+
+  self._read_cb = cb
 
   if not self._buffer:empty() then
-    uv.defer(on_raw_data, self, '', cb, mode)
+    uv.defer(do_read, self._sock, nil, '')
   end
+
+  self._sock:start_read(do_read)
 
   return self
 end
@@ -772,7 +803,7 @@ end
 
 function WSSocket:_stop_read()
   self._sock:stop_read()
-  self._reading = false
+  self._read_cb = nil
   return self
 end
 

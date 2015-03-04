@@ -54,18 +54,23 @@ function readReport(dir, agent)
   return t
 end
 
-function printReport(name, t)
+function printReport(name, t, dump)
   print("","Test case ID " .. name .. ":")
   for k, v in pairs(t) do
     print("","",k,"=>",v)
   end
+
+  if dump then
+    print(readFile(path.join(reportDir, t.reportfile)))
+  end
+
   print("-------------")
 end
 
-function printReports(name, t)
+function printReports(name, t, dump)
   print(name .. ":")
   for k, v in pairs(t)do
-    printReport(k, v)
+    printReport(k, v, dump)
   end
 end
 
@@ -183,7 +188,7 @@ function runAll()
       warnings[name] = result
     elseif result.behavior == 'UNIMPLEMENTED' then
       warnings[name] = result
-    elseif result.behaviorClose ~= 'OK' then
+    elseif result.behaviorClose ~= 'OK' and result.behaviorClose ~= 'INFORMATIONAL' then
       warnings[name] = result
     end
   end
@@ -193,7 +198,7 @@ function runAll()
   end
 
   if next(errors) then
-    printReports("ERROR", errors)
+    printReports("ERROR", errors, true)
     os.exit(-1)
   end
 end

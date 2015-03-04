@@ -38,11 +38,11 @@ script:
   - cd test
   - lua test.lua
   - wstest -m fuzzingserver &
-  - sleep 5
+  - sleep 10
   - lua -lluacov ./autobahn_client_test.lua
   - killall wstest
   - wstest -m fuzzingserver -s fuzzingserver_wss.json &
-  - sleep 5
+  - sleep 10
   - lua -lluacov ./autobahn_client_test.lua wss://127.0.0.1:9001
   - killall wstest
   - lua -lluacov ./autobahn_server_test.lua ws  127.0.0.1 9002
