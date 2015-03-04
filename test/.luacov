@@ -6,6 +6,7 @@ return {
 
   include = {
     "/lluv/websocket$",
+    "/lluv/websocket/.+$",
   };
 
   exclude = {

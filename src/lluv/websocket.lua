@@ -223,8 +223,8 @@ function WSSocket:__init(opt, s)
     if opt.utf8 == true then
       self._validator = require"lluv.websocket.utf8".validator()
     else
-      assert(type(opt.utf8.next)  == 'function')
-      assert(type(opt.utf8.reset) == 'function')
+      assert(type(opt.utf8.next)     == 'function')
+      assert(type(opt.utf8.validate) == 'function')
       self._validator = opt.utf8
     end
   end

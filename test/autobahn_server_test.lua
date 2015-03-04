@@ -1,7 +1,7 @@
 local uv   = require"lluv"
 local ws   = require"lluv.websocket"
-local json = require "cjson"
-local path = require "path"
+local json = require"cjson"
+local path = require"path"
 
 local ctx do
   local ok, ssl = pcall(require, "lluv.ssl")
@@ -14,13 +14,26 @@ local ctx do
   end
 end
 
-ctx = nil
-
 local reportDir = "./reports/servers"
-local agent     = "lluv-websocket"
+local protocol  = arg[1] or "ws" protocol = protocol:lower()
+local host      = arg[2] or "127.0.0.1"
+local port      = arg[3] or "9002"
+if protocol == 'ws' then ctx = nil end
+local url       = protocol .. "://" .. host .. ":" .. port
+local agent     = string.format("lluv-websocket (%s / %s)", jit and jit.version or _VERSION, ctx and "WSS" or "WS")
 local exitCode  = -1
 local errors    = {}
 local warnings  = {}
+
+local config = {
+  outdir = reportDir,
+  servers = {
+    { agent = agent, url = url},
+  },
+  cases = {"1.*", "2.*", "3.*", "4.*", "5.*", "6.*", "6.2.*", "7.*","10.*"},
+  ["exclude-cases"] = {"3.*", "6.4.2", "6.4.3", "6.4.4"},
+  ["exclude-agent-cases"] = {},
+}
 
 function wstest(args, cb)
   return uv.spawn({
@@ -42,8 +55,18 @@ function readFile(p)
   return d
 end
 
+function writeFile(p, data)
+  local f = assert(io.open(p, "w+"))
+  f:write(data)
+  f:close()
+end
+
 function readJson(p)
   return json.decode(readFile(p))
+end
+
+function writeJson(p, t)
+  return writeFile(p, json.encode(t))
 end
 
 function cleanDir(p, mask)
@@ -90,15 +113,13 @@ function runTest(cb)
 
   local currentCaseId = 0
   local server = ws.new{ssl = ctx, utf8 = true}
-  server:bind("127.0.0.1", 9002, function(self, err)
+  server:bind(host, port, function(self, err)
     if err then
       print("Server error:", err)
       return server:close()
     end
 
-    local cfg = ctx and "fuzzingclient_wss.json" or "fuzzingclient.json"
-
-    wstest({"-m" ,"fuzzingclient", "-s", cfg}, function(code, status)
+    wstest({"-m" ,"fuzzingclient", "-s", "fuzzingclient.json"}, function(code, status)
       server:close(function()
         cb(code, status)
       end)
@@ -139,6 +160,8 @@ function runTest(cb)
 end
 
 cleanReports(reportDir)
+
+writeJson("fuzzingclient.json", config)
 
 runTest(function()
   local report = readReport(reportDir, agent)

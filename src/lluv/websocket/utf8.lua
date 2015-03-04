@@ -13,17 +13,6 @@
 local ut       = require "lluv.utils"
 local validate = require "lluv.websocket.utf8_validator".validate
 
-local function utf8_validate_array(t)
-  local tail = ''
-  for i = 1, #t do
-    local str = tail .. t[i]
-    local ok, pos = validate(str)
-    if ok then tail = ''
-    else tail = string.sub(str, pos) end
-  end
-  return tail == ''
-end
-
 local Utf8Validator = ut.class() do
 
 function Utf8Validator:__init()
