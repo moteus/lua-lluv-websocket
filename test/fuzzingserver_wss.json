@@ -1,7 +1,7 @@
 {
    "url":  "wss://127.0.0.1:9001",
-   "key":  "wss/server.key",
-   "cert": "wss/server.crt",
+   "key":  "./wss/server.key",
+   "cert": "./wss/server.crt",
 
    "options": {"failByDrop": false},
    "outdir": "./reports/clients",

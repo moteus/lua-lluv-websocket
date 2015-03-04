@@ -242,7 +242,7 @@ function WSSocket:__init(opt, s)
 end
 
 local function dns_request(host, cb)
-  uv.getaddrinfo(host, port, {
+  uv.getaddrinfo(host, nil, {
     socktype = "stream";
     protocol = "tcp";
   }, cb)
