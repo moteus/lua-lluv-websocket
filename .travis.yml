@@ -8,7 +8,7 @@ env:
     - LUAROCKS=2.2.0
   matrix:
     - LUA=lua5.1
-    - LUA=lua5.2
+    # - LUA=lua5.2
     # - LUA=lua5.3
     # - LUA=luajit
 
@@ -21,8 +21,12 @@ before_install:
   - bash .travis/setup_lua.sh
   - bash .travis/setup_uv.sh
   - sudo luarocks install luacov-coveralls
-  - sudo luarocks install luasocket
-  - sudo luarocks install lua-websockets-core --server=http://rocks.moonscript.org/dev
+  # - sudo luarocks install lua-websockets-core --server=http://rocks.moonscript.org/dev
+  - sudo apt-get install libev-dev
+  - git clone https://github.com/moteus/lua-websockets.git -b fix-lua52-compat
+  - cd lua-websockets
+  - sudo luarocks make rockspecs/lua-websockets-scm-1.rockspec
+  - cd $TRAVIS_BUILD_DIR
   - sudo luarocks install lluv --server=http://rocks.moonscript.org/dev UV_DIR=$TRAVIS_BUILD_DIR/libuv
   - git clone --depth=1 --recursive https://github.com/zhaozg/lua-openssl.git
   - cd lua-openssl
@@ -31,8 +35,8 @@ before_install:
   - sudo luarocks install lluv-ssl --server=http://rocks.moonscript.org/dev
 
 install:
-  - sudo luarocks make rockspecs/lluv-websocket-scm-0.rockspec
-  - sudo luarocks make rockspecs/lua-websockets-lluv-scm-0.rockspec
+  - sudo luarocks make rockspecs/lluv-websocket-scm-0.rockspec --deps-mode=none
+  - sudo luarocks make rockspecs/lua-websockets-lluv-scm-0.rockspec --deps-mode=none
 
 script: 
   - cd test
