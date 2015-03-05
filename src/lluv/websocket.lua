@@ -589,7 +589,9 @@ local on_control = function(self, mode, cb, decoded, fin, opcode, masked, rsv1, 
   end
 
   if opcode == CLOSE then
-    if #decoded > 0 then
+    if #decoded >= 126 then
+      self._code, self._reason = 1002, "Too long payload"
+    elseif #decoded > 0 then
       self._code, self._reason = frame.decode_close(decoded)
       local ncode = tonumber(self._code)
 
@@ -692,13 +694,6 @@ local on_data = function(self, mode, cb, decoded, fin, opcode, masked, rsv1, rsv
     end
   end
 end
-
--- local function test_decode_bug_size()
---  local ok, n = frame.decode('\0')
---  assert(ok == nil and n == 1)
--- end
-
--- test_decode_bug_size()
 
 local function next_frame(self)
   local encoded = self._buffer:read_some()
