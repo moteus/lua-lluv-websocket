@@ -768,7 +768,7 @@ function WSSocket:_start_read(mode, cb)
         self._state = 'CLOSED'
       end
 
-      return self._read_cb(self, err)
+      return cb(self, err)
     end
 
     on_raw_data(self, data, cb, mode)
