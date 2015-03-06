@@ -28,8 +28,6 @@ local DummyLogger do
   }
 end
 
-local EOF = uv.error(uv.ERROR_UV, uv.EOF)
-
 local function ocall(f, ...)
   if f then return f(...) end
 end
@@ -53,12 +51,6 @@ local on_close = function(self, was_clean, code, reason)
   if self._clients[self._proto] ~= nil then self._clients[self._proto][self] = nil end
 
   ocall(self._on_close, self, was_clean, code, reason or '')
-end
-
-local handle_sock_err = function(self, err)
-  self._sock:close(function(self, clean, code, reason)
-    on_error(self, err)
-  end)
 end
 
 function Client:__init(listener, sock, protocol)
@@ -113,19 +105,12 @@ end
 function Client:start()
   self._sock:start_read(function(sock, err, message, opcode)
     if err then
-      if err:name() == 'EOF' then
-        if err:cat() == 'WEBSOCKET' then
-          return self._sock:close(function(sock, clean, code, reason)
-            on_close(self, clean, code, reason)
-          end)
-        end
-      end
-      return handle_sock_err(self, err)
+      return self._sock:close(function(sock, clean, code, reason)
+        on_close(self, clean, code, reason, err)
+      end)
     end
 
-    if opcode == TEXT or opcode == BINARY then
-      return ocall(self._on_message, self, message, opcode)
-    end
+    return ocall(self._on_message, self, message, opcode)
   end)
 end
 
@@ -155,7 +140,7 @@ local function on_new_client(self, cli)
       protocol_index   = true
       protocol_handler = self._default_handler
     else
-      sock:close()
+      cli:close()
       return on_error(self, 'Websocket Handshake failed: bad protocol - ' .. tostring(protocol))
     end
 
@@ -249,6 +234,11 @@ function Listener:close(keep_clients)
       end
     end
   end
+end
+
+function Listener:on_error(handler)
+  self._on_error = handler
+  return self
 end
 
 end

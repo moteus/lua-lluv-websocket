@@ -18,14 +18,6 @@ local ocall     = function (f, ...) if f then return f(...) end end
 
 local TEXT, BINARY = websocket.TEXT, websocket.BINARY
 
-function isWSEOF(err)
-  return err:name() == 'EOF' and err.cat and err:cat() == 'WEBSOCKET'
-end
-
-function isEOF(err)
-  return err:name() == 'EOF'
-end
-
 local Client = ut.class() do
 
 local cleanup = function(self)
