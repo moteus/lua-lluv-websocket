@@ -9,8 +9,8 @@ This library includes stream interface for lluv and lluv backend for [lua-websoc
  * PING/PONG - done
  * WSS supports - done
  * UT8 validate - done (except some fast fail cases)
+ * IPv6 - done (not tested)
  * Validate RSV bits - needs [lua-websockets/PR #55](https://github.com/lipp/lua-websockets/pull/55) (tested)
- * IPv6 - needs [lua-websockets/PR #56](https://github.com/lipp/lua-websockets/pull/56) (not tested)
  * Extension (e.g. compression) - not supported (for now I have no plans for this)
 
 ## [lua-websockets](https://github.com/lipp/lua-websockets) backend status
