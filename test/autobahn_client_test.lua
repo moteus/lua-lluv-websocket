@@ -1,7 +1,6 @@
 local uv        = require "lluv"
 local websocket = require "lluv.websocket"
-local json      = require "cjson"
-local path      = require "path"
+local Autobahn  = require "./autobahn"
 
 local ctx do
   local ok, ssl = pcall(require, "lluv.ssl")
@@ -18,61 +17,6 @@ local reportDir     = "./reports/clients"
 local agent         = "lluv-websocket"
 local caseCount     = 0
 local currentCaseId = 0
-local errors        = {}
-local warnings      = {}
-
-function readFile(p)
-  p = path.fullpath(p)
-  local f = assert(io.open(p, 'rb'))
-  local d = f:read("*a")
-  f:close()
-  return d
-end
-
-function readJson(p)
-  return json.decode(readFile(p))
-end
-
-function cleanDir(p, mask)
-  if path.exists(p) then
-    path.each(path.join(p, mask), function(P)
-      path.remove(P)
-    end)
-  end
-end
-
-function cleanReports(p)
-  cleanDir(p, "*.json")
-  cleanDir(p, "*.html")
-end
-
-function readReport(dir, agent)
-  local p = path.join(dir, "index.json")
-  if not path.exists(p) then return end
-  local t = readJson(p)
-  t = t[agent] or {}
-  return t
-end
-
-function printReport(name, t, dump)
-  print("","Test case ID " .. name .. ":")
-  for k, v in pairs(t) do
-    print("","",k,"=>",v)
-  end
-
-  if dump then
-    print(readFile(path.join(reportDir, t.reportfile)))
-  end
-
-  print("-------------")
-end
-
-function printReports(name, t, dump)
-  print(name .. ":")
-  for k, v in pairs(t)do
-    printReport(k, v, dump)
-  end
-end
 
 function isWSEOF(err)
   return err:name() == 'EOF' and err.cat and err:cat() == 'WEBSOCKET'
@@ -83,7 +27,9 @@ function isEOF(err)
 end
 
 function getCaseCount(cont)
-  websocket.new{ssl = ctx}:connect(URI .. "/getCaseCount", "echo", function(cli, err)
+  local ws_uri = Autobahn.Server.getCaseCount(URI)
+
+  websocket.new{ssl = ctx}:connect(ws_uri, "echo", function(cli, err)
     if err then
       print("Client connect error:", err)
       return cli:close()
@@ -103,8 +49,8 @@ function getCaseCount(cont)
   end)
 end
 
-function runtTestCase(no, cb)
-  local ws_uri = URI .. "/runCase?case=" .. no .. "&agent=" .. agent
+function runTestCase(no, cb)
+  local ws_uri = Autobahn.Server.runTestCase(URI, no, agent)
 
   websocket.new{ssl = ctx, utf8 = true}:connect(ws_uri, "echo", function(cli, err)
     if err then
@@ -130,20 +76,8 @@ function runtTestCase(no, cb)
   end)
 end
 
-function runNextCase()
-  runtTestCase(currentCaseId, function(_, err, code, reason)
-    currentCaseId = currentCaseId + 1
-    if currentCaseId <= caseCount then
-      runNextCase()
-    else
-      print("All test cases executed.")
-      updateReports()
-    end
-  end)
-end
-
 function updateReports()
-  local ws_uri = URI .. "/updateReports?agent=" .. agent
+  local ws_uri = Autobahn.Server.updateReports(URI, agent)
 
   websocket.new{ssl = ctx}:connect(ws_uri, "echo", function(cli, err)
     if err then
@@ -170,42 +104,29 @@ function updateReports()
   end)
 end
 
-function runAll()
+function runNextCase()
+  runTestCase(currentCaseId, function(_, err, code, reason)
+    currentCaseId = currentCaseId + 1
+    if currentCaseId <= caseCount then
+      runNextCase()
+    else
+      print("All test cases executed.")
+      updateReports()
+    end
+  end)
+end
+
+local function runAll()
   currentCaseId = 1
-  cleanReports(reportDir)
+  Autobahn.cleanReports(reportDir)
   getCaseCount(runNextCase)
   uv.run(debug.traceback)
-  updateReports()
-  uv.run(debug.traceback)
 
-  local report = readReport(reportDir, agent)
-  local behavior, behaviorClose = {}, {}
-
-  for name, result in pairs(report) do
-    if result.behavior == 'FAILED' then
-      errors[name] = result
-    elseif result.behavior == 'WARNING' then
-      warnings[name] = result
-    elseif result.behavior == 'UNIMPLEMENTED' then
-      warnings[name] = result
-    elseif result.behaviorClose ~= 'OK' and result.behaviorClose ~= 'INFORMATIONAL' then
-      warnings[name] = result
-    end
-  end
-
-  if next(warnings) then
-    printReports("WARNING", warnings)
-  end
-
-  if next(errors) then
-    printReports("ERROR", errors, true)
-    os.exit(-1)
+  if not Autobahn.verifyReport(reportDir, agent) then
+    return os.exit(-1)
   end
 end
 
 runAll()
 
--- runtTestCase(10, print)
-
-uv.run(debug.traceback)
-
+-- runtTestCase(10, print) uv.run(debug.traceback)

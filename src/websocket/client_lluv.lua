@@ -18,6 +18,14 @@ local ocall     = function (f, ...) if f then return f(...) end end
 
 local TEXT, BINARY = websocket.TEXT, websocket.BINARY
 
+function isWSEOF(err)
+  return err:name() == 'EOF' and err.cat and err:cat() == 'WEBSOCKET'
+end
+
+function isEOF(err)
+  return err:name() == 'EOF'
+end
+
 local Client = ut.class() do
 
 local cleanup = function(self)
@@ -60,7 +68,7 @@ end
 function Client:connect(url, proto)
   if self._sock then return end
 
-  self._sock = websocket.new{ssl = self._ws.ssl}
+  self._sock = websocket.new{ssl = self._ws.ssl, utf8 = self._ws.utf8}
 
   self._sock:connect(url, proto, function(sock, err)
     if err then return on_error(self, err) end
@@ -69,12 +77,9 @@ function Client:connect(url, proto)
 
     sock:start_read(function(sock, err, message, opcode)
       if err then
-        if (err:name() == 'EOF') and (err:cat() == 'WEBSOCKET') then
-          return self._sock:close(function(sock, clean, code, reason)
-            on_close(self, clean, code, reason)
-          end)
-        end
-        return handle_sock_err(self, err)
+        return self._sock:close(function(sock, clean, code, reason)
+          on_close(self, clean, code, reason)
+        end)
       end
 
       if opcode == TEXT or opcode == BINARY then
@@ -116,8 +121,8 @@ end
 
 end
 
-return setmetatable({
-  sync = require'websocket.client_lluv_sync';
-},{__call = function(_, ...)
+local ok, sync = pcall(require, 'websocket.client_lluv_sync')
+
+return setmetatable({sync = sync},{__call = function(_, ...)
   return Client.new(...)
 end})

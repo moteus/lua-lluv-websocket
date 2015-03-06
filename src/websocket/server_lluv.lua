@@ -191,7 +191,9 @@ function Listener:__init(opts)
 
   sock = websocket.new{ssl = opts.ssl}
 
-  local ok, err = sock:bind(opts.interface or '*', opts.port or 80)
+  local url = "ws://" .. (opts.interface or "*") .. ":" .. (opts.port or "80")
+  
+  local ok, err = sock:bind(url, self._protocols)
   if not ok then
     sock:close()
     return nil, err
@@ -202,7 +204,7 @@ function Listener:__init(opts)
 
   self._sock = sock
 
-  sock:listen(self._protocols, function(sock, err)
+  sock:listen(function(sock, err)
     local cli, err = sock:accept()
     assert(cli, tostring(err))
 

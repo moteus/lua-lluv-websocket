@@ -1,7 +1,6 @@
-local uv   = require"lluv"
-local ws   = require"lluv.websocket"
-local json = require"cjson"
-local path = require"path"
+local uv        = require"lluv"
+local websocket = require"lluv.websocket"
+local Autobahn  = require"./autobahn"
 
 local ctx do
   local ok, ssl = pcall(require, "lluv.ssl")
@@ -16,10 +15,11 @@ end
 
 local reportDir = "./reports/servers"
 local url       = arg[1] or "ws://127.0.0.1:9000"
-local agent     = string.format("lluv-websocket (%s / %s)", jit and jit.version or _VERSION, ctx and "WSS" or "WS")
+local agent     = string.format("lluv-websocket (%s / %s)",
+  jit and jit.version or _VERSION, 
+  url:lower():match("^wss:") and "WSS" or "WS"
+)
 local exitCode  = -1
-local errors    = {}
-local warnings  = {}
 
 local config = {
   outdir = reportDir,
@@ -43,72 +43,13 @@ function wstest(args, cb)
   end)
 end
 
-function readFile(p)
-  p = path.fullpath(p)
-  local f = assert(io.open(p, 'rb'))
-  local d = f:read("*a")
-  f:close()
-  return d
-end
-
-function writeFile(p, data)
-  local f = assert(io.open(p, "w+"))
-  f:write(data)
-  f:close()
-end
-
-function readJson(p)
-  return json.decode(readFile(p))
-end
-
-function writeJson(p, t)
-  return writeFile(p, json.encode(t))
-end
-
-function cleanDir(p, mask)
-  if path.exists(p) then
-    path.each(path.join(p, mask), function(P)
-      path.remove(P)
-    end)
-  end
-end
-
-function cleanReports(p)
-  cleanDir(p, "*.json")
-  cleanDir(p, "*.html")
-end
-
-function readReport(dir, agent)
-  local p = path.join(dir, "index.json")
-  if not path.exists(p) then return end
-  local t = readJson(p)
-  t = t[agent] or {}
-  return t
-end
-
-function printReport(name, t)
-  print("","Test case ID " .. name .. ":")
-  for k, v in pairs(t) do
-    print("","",k,"=>",v)
-  end
-  print("-------------")
-end
-
-function printReports(name, t)
-  print(name .. ":")
-  for k, v in pairs(t)do
-    printReport(k, v)
-  end
-end
-
 function isWSEOF(err)
   return err:name() == 'EOF' and err.cat and err:cat() == 'WEBSOCKET'
 end
 
 function runTest(cb)
-
   local currentCaseId = 0
-  local server = ws.new{ssl = ctx, utf8 = true}
+  local server = websocket.new{ssl = ctx, utf8 = true}
   server:bind(url, "echo", function(self, err)
     if err then
       print("Server error:", err)
@@ -145,49 +86,24 @@ function runTest(cb)
             return cli:close()
           end
 
-          if opcode == ws.TEXT or opcode == ws.BINARY then
+          if opcode == websocket.TEXT or opcode == websocket.BINARY then
             cli:write(message, opcode)
           end
         end)
       end)
     end)
   end)
-
 end
 
-cleanReports(reportDir)
+Autobahn.cleanReports(reportDir)
 
-writeJson("fuzzingclient.json", config)
+Autobahn.Utils.writeJson("fuzzingclient.json", config)
 
 runTest(function()
-  local report = readReport(reportDir, agent)
-
-  if not report then
-    exitCode = -2
+  if not Autobahn.verifyReport(reportDir, agent) then
+    exitCode = -1
   else
     exitCode = 0
-
-    for name, result in pairs(report) do
-      if result.behavior == 'FAILED' then
-        errors[name] = result
-      elseif result.behavior == 'WARNING' then
-        warnings[name] = result
-      elseif result.behavior == 'UNIMPLEMENTED' then
-        warnings[name] = result
-      elseif result.behaviorClose ~= 'OK' and result.behaviorClose ~= 'INFORMATIONAL' then
-        warnings[name] = result
-      end
-    end
-
-
-    if next(warnings) then
-      printReports("WARNING", warnings)
-    end
-
-    if next(errors) then
-      printReports("ERROR", errors)
-      exitCode = -1
-    end
   end
 
   print"DONE"
