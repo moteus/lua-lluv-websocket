@@ -825,7 +825,7 @@ function WSSocket:accept()
   if self._ssl then cli = assert(self._ssl:server(cli)) end
   return WSSocket.new({
     protocols = self._protocols;
-    utf8      = self._validator.new();
+    utf8      = self._validator and self._validator.new();
   }, cli)
 end
 
