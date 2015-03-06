@@ -808,7 +808,40 @@ function WSSocket:stop_read()
   return self:_stop_read()
 end
 
-function WSSocket:bind(host, port, cb)
+function WSSocket:bind(url, protocols, cb)
+  if type(protocols) == 'function' then
+    cb, protocols = protocols
+  end
+
+  self._protocols = protocols or self._protocols
+  if not self._protocols then error("No protocols") end
+
+  if type(self._protocols) == 'string' then self._protocols = {self._protocols} end
+
+  assert(type(self._protocols) == 'table')
+
+  local protocol, host, port, uri = tools.parse_url(url)
+
+  if protocol ~= 'ws' and protocol ~= 'wss'  then
+    local err = WSError_ENOSUP("bad protocol - " .. protocol)
+    if cb then
+      uv.defer(cb, self, err)
+      return self
+    end
+    return nil, err
+  end
+
+  if protocol == 'wss' and not self._ssl then
+    local err = WSError_ENOSUP("unsuported protocol - " .. protocol)
+    if cb then
+      uv.defer(cb, self, err)
+      return self
+    end
+    return nil, err
+  end
+
+  self._is_wss = (protocol == 'wss')
+
   local ok, err
   if cb then
     ok, err = self._sock:bind(host, port, function(_, ...) cb(self, ...) end)
@@ -822,25 +855,14 @@ end
 function WSSocket:accept()
   local cli, err = self._sock:accept()
   if not cli then return nil, err end
-  if self._ssl then cli = assert(self._ssl:server(cli)) end
+  if self._is_wss then cli = assert(self._ssl:server(cli)) end
   return WSSocket.new({
     protocols = self._protocols;
     utf8      = self._validator and self._validator.new();
   }, cli)
 end
 
-function WSSocket:listen(protocols, cb)
-  if type(protocols) == 'function' then
-    cb, protocols = protocols
-  end
-
-  self._protocols = protocols or self._protocols
-  if not self._protocols then error("No protocols") end
-
-  if type(self._protocols) == 'string' then self._protocols = {self._protocols} end
-
-  assert(type(self._protocols) == 'table')
-
+function WSSocket:listen(cb)
   local ok, err = self._sock:listen(function(_, ...)
     cb(self, ...)
   end)

@@ -15,11 +15,7 @@ local ctx do
 end
 
 local reportDir = "./reports/servers"
-local protocol  = arg[1] or "ws" protocol = protocol:lower()
-local host      = arg[2] or "127.0.0.1"
-local port      = arg[3] or "9002"
-if protocol == 'ws' then ctx = nil end
-local url       = protocol .. "://" .. host .. ":" .. port
+local url       = arg[1] or "ws://127.0.0.1:9000"
 local agent     = string.format("lluv-websocket (%s / %s)", jit and jit.version or _VERSION, ctx and "WSS" or "WS")
 local exitCode  = -1
 local errors    = {}
@@ -113,7 +109,7 @@ function runTest(cb)
 
   local currentCaseId = 0
   local server = ws.new{ssl = ctx, utf8 = true}
-  server:bind(host, port, function(self, err)
+  server:bind(url, "echo", function(self, err)
     if err then
       print("Server error:", err)
       return server:close()
@@ -125,7 +121,7 @@ function runTest(cb)
       end)
     end)
 
-    server:listen("echo", function(self, err)
+    server:listen(function(self, err)
       if err then
         print("Server listen:", err)
         return server:close()

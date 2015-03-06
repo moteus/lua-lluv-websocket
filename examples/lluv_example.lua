@@ -1,14 +1,17 @@
 local uv  = require"lluv"
 local ws  = require"lluv.websocket"
 
+local wsurl   = "ws://127.0.0.1:12345"
+local sprot = "echo"
+
 local server = ws.new()
-server:bind("127.0.0.1", 12345, function(self, err)
+server:bind(wsurl, sprot, function(self, err)
   if err then
     print("Server error:", err)
     return server:close()
   end
 
-  server:listen("echo", function(self, err)
+  server:listen(function(self, err)
     if err then
       print("Server listen:", err)
       return server:close()
@@ -35,7 +38,7 @@ server:bind("127.0.0.1", 12345, function(self, err)
 end)
 
 local cli = ws.new()
-cli:connect("ws://127.0.0.1:12345", "echo", function(self, err)
+cli:connect(wsurl, sprot, function(self, err)
   if err then
     print("Client connect error:", err)
     return cli:close()
