@@ -150,7 +150,7 @@ local function on_new_client(self, cli)
     if protocol and self._handlers[protocol] then
       protocol_index   = protocol
       protocol_handler = self._handlers[protocol]
-    elseif self._default_protocol then
+    elseif self._default_handler then
       -- true is the 'magic' index for the default handler
       protocol_index   = true
       protocol_handler = self._default_handler
@@ -163,7 +163,7 @@ local function on_new_client(self, cli)
 
     local new_client = Client.new(self, cli, protocol_index)
 
-     protocol_handler(new_client)
+    protocol_handler(new_client)
 
     new_client:start()
   end)
@@ -189,10 +189,10 @@ function Listener:__init(opts)
 
   self._logger          = opts.logger or DummyLogger
 
-  sock = websocket.new{ssl = opts.ssl}
+  sock = websocket.new{ssl = opts.ssl, utf8 = opts.utf8}
 
-  local url = "ws://" .. (opts.interface or "*") .. ":" .. (opts.port or "80")
-  
+  local url = opts.url or ("ws://" .. (opts.interface or "*") .. ":" .. (opts.port or "80"))
+
   local ok, err = sock:bind(url, self._protocols)
   if not ok then
     sock:close()
@@ -237,6 +237,18 @@ end
 function Listener:set_logger(logger)
   self._logger = logger or DummyLogger
   return self
+end
+
+function Listener:close(keep_clients)
+  if not self._sock then return end
+  self._sock:close()
+  if not keep_clients then
+    for protocol, clients in pairs(self._clients) do
+      for client in pairs(clients) do
+        client:close()
+      end
+    end
+  end
 end
 
 end
