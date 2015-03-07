@@ -560,8 +560,14 @@ end
 
 local validate_frame = function(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
   if rsv1 or rsv2 or rsv3 then -- Invalid frame
-      if self._state == 'WAIT_DATA' then
+    if self._state == 'WAIT_DATA' then
       protocol_error(self, 1002, "Invalid reserved bit", cb)
+    end
+    return false
+  end
+  if self._masked == masked then
+    if self._state == 'WAIT_DATA' then
+      protocol_error(self, 1002, "Invalid masked bit", cb)
     end
     return false
   end

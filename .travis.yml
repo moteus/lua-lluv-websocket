@@ -31,11 +31,11 @@ before_install:
       sudo luarocks install bit32;
     fi
   # lua-websockets
-  - git clone https://github.com/moteus/lua-websockets.git -b fix-lua52-compat
-  - cd lua-websockets
-  - sudo luarocks make rockspecs/lua-websockets-scm-1.rockspec --deps-mode=none
-  - cd $TRAVIS_BUILD_DIR
-  # - sudo luarocks install lua-websockets-core --server=http://rocks.moonscript.org/dev --deps-mode=none
+  # - git clone https://github.com/moteus/lua-websockets.git -b fix-lua52-compat
+  # - cd lua-websockets
+  # - sudo luarocks make rockspecs/lua-websockets-scm-1.rockspec --deps-mode=none
+  # - cd $TRAVIS_BUILD_DIR
+  - sudo luarocks install lua-websockets-core --server=http://rocks.moonscript.org/dev --deps-mode=none
   - sudo luarocks install lluv --server=http://rocks.moonscript.org/dev UV_DIR=$TRAVIS_BUILD_DIR/libuv
   # lua-openssl
   - git clone --depth=1 --recursive https://github.com/zhaozg/lua-openssl.git
