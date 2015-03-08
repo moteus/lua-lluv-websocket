@@ -247,6 +247,8 @@ function WSSocket:__init(opt, s)
     end
   end
 
+  self._on_write = function(_, err, cb) cb(self, err) end
+
   return self
 end
 
@@ -339,7 +341,7 @@ function WSSocket:write(msg, opcode, cb)
 
   local ok, err
   if not cb then ok, err = self._sock:write(encoded)
-  else ok, err = self._sock:write(encoded, function(_, ...) cb(self, ...) end) end
+  else ok, err = self._sock:write(encoded, self._on_write, cb) end
   if not ok then return nil, err end
   return self
 end
