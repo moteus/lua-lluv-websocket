@@ -10,7 +10,7 @@
 --
 ------------------------------------------------------------------
 
-local trace = print
+local trace -- = print
 
 local uv        = require "lluv"
 local ut        = require "lluv.utils"
@@ -179,7 +179,7 @@ end
 function SizedBuffer:prepend(data)
   if data then
     self._size = self._size + #data
-    base.append(self, data)
+    base.prepend(self, data)
   end
   return self
 end
