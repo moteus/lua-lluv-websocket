@@ -85,7 +85,7 @@ Autobahn.cleanReports(reportDir)
 Autobahn.Utils.writeJson("fuzzingclient.json", config)
 
 runTest(function()
-  if not Autobahn.verifyReport(reportDir, agent) then
+  if not Autobahn.verifyReport(reportDir, agent, true) then
     exitCode = -1
   else
     exitCode = 0

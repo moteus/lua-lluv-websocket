@@ -31,10 +31,15 @@ local function cleanDir(p, mask)
   end
 end
 
-local function printReport(name, t)
+local function printReport(name, t, dump)
   print("","Test case ID " .. name .. ":")
   for k, v in pairs(t) do
     print("","",k,"=>",v)
+  end
+  if dump then
+    local s = readFile(path.join(dump, t.reportfile))
+    print("", t.reportfile)
+    print((s:gsub("[\r\n]+","\n")))
   end
   print("-------------")
 end
@@ -69,7 +74,7 @@ function Autobahn.printReports(name, t, dump)
   end
 end
 
-function Autobahn.verifyReport(p, agent)
+function Autobahn.verifyReport(p, agent, dump)
   local report = Autobahn.readReport(p, agent)
   if not report then return false end
 
@@ -89,11 +94,11 @@ function Autobahn.verifyReport(p, agent)
   end
 
   if next(warnings) then
-    Autobahn.printReports("WARNING", warnings)
+    Autobahn.printReports("WARNING", warnings, dump and p)
   end
 
   if next(errors) then
-    Autobahn.printReports("ERROR", errors)
+    Autobahn.printReports("ERROR", errors, dump and p)
     return false
   end
 

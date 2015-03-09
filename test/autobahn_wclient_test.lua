@@ -116,7 +116,7 @@ local function runAll()
   getCaseCount(runNextCase)
   uv.run(debug.traceback)
 
-  if not Autobahn.verifyReport(reportDir, agent) then
+  if not Autobahn.verifyReport(reportDir, agent, true) then
     return os.exit(-1)
   end
 end
