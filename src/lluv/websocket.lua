@@ -10,7 +10,7 @@
 --
 ------------------------------------------------------------------
 
-local trace -- = print
+local trace = print
 
 local uv        = require "lluv"
 local ut        = require "lluv.utils"
@@ -137,7 +137,7 @@ function SizedBuffer:__init(buffer)
   assert(base.__init(self))
   self._size = 0
 
-  while true do
+  while buffer do
     local chunk = buffer:read_some()
     if not chunk then break end
     self:append(chunk)
