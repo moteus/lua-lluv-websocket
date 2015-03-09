@@ -20,6 +20,7 @@ before_install:
   - sudo pip install autobahntestsuite
   - bash .travis/setup_lua.sh
   - bash .travis/setup_uv.sh
+  - bash .travis/setup_openssl.sh
   - sudo luarocks install luacov-coveralls
   # lua-websockets deps
   - sudo luarocks install struct
@@ -36,13 +37,7 @@ before_install:
   # - sudo luarocks make rockspecs/lua-websockets-scm-1.rockspec --deps-mode=none
   # - cd $TRAVIS_BUILD_DIR
   - sudo luarocks install lua-websockets-core --server=http://rocks.moonscript.org/dev --deps-mode=none
-  - sudo luarocks install lluv --server=http://rocks.moonscript.org/dev UV_DIR=$TRAVIS_BUILD_DIR/libuv
-  # lua-openssl
-  - git clone --depth=1 --recursive https://github.com/zhaozg/lua-openssl.git
-  - cd lua-openssl
-  - sudo luarocks make rockspecs/openssl-scm-1.rockspec
-  - cd $TRAVIS_BUILD_DIR
-  - sudo luarocks install lluv-ssl --server=http://rocks.moonscript.org/dev
+  - sudo luarocks install lluv-ssl --server=http://rocks.moonscript.org/dev UV_DIR=$TRAVIS_BUILD_DIR/libuv
 
 install:
   - sudo luarocks make rockspecs/lluv-websocket-scm-0.rockspec --deps-mode=none

@@ -1,3 +1,6 @@
 
 # Autobanh reports
 test/reports
+
+# LuaCov
+luacov.stats.out
