@@ -346,6 +346,20 @@ function WSSocket:write(msg, opcode, cb)
   return self
 end
 
+function WSSocket:ready(mask, buffer)
+  if type(buffer) == "string" then
+    self._buffer = SizedBuffer.new()
+    self._buffer:append(buffer)
+  else
+    self._buffer = SizedBuffer.new(buffer)
+  end
+
+  self._ready  = true
+  self._state  = "WAIT_DATA"
+  self._masked = mask
+  return self
+end
+
 function WSSocket:_client_handshake(key, req, cb)
   self._sock:write(req, function(sock, err)
     if err then
@@ -381,13 +395,9 @@ function WSSocket:_client_handshake(key, req, cb)
       return cb(self, err)
     end
 
-    self._buffer = SizedBuffer.new(buffer)
+    self:ready(true, buffer)
 
     if trace then trace("WS HS DONE>", "buffer size:", self._buffer:size()) end
-
-    self._ready  = true
-    self._state  = "WAIT_DATA"
-    self._masked = true
 
     cb(self, nil, headers)
   end)
@@ -447,11 +457,7 @@ function WSSocket:_server_handshake(cb)
         return cb(self, err)
       end
 
-      self._buffer = SizedBuffer.new(buffer)
-
-      self._ready  = true
-      self._state  = "WAIT_DATA"
-      self._masked = false
+      self:ready(false, buffer)
 
       cb(self, nil, protocol, headers)
     end)
