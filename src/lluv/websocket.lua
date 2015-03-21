@@ -15,7 +15,7 @@ local trace -- = print
 local uv        = require "lluv"
 local ut        = require "lluv.utils"
 local tools     = require "websocket.tools"
-local frame     = require "websocket.frame"
+local frame     = require "lluv.websocket.frame"
 local handshake = require "websocket.handshake"
 
 local ok, ssl   = pcall(require, 'lluv.ssl')
@@ -342,6 +342,14 @@ function WSSocket:write(msg, opcode, cb)
   local ok, err
   if not cb then ok, err = self._sock:write(encoded)
   else ok, err = self._sock:write(encoded, self._on_write, cb) end
+
+  if trace then
+    if type(encoded) == 'table' then
+      encoded = table.concat(encoded)
+    end
+    trace("WS RAW TX>", os.time(), self._state, hex(encoded))
+  end
+
   if not ok then return nil, err end
   return self
 end

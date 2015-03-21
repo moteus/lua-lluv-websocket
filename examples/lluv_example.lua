@@ -67,4 +67,4 @@ cli:connect(wsurl, sprot, function(self, err)
   cli:write("Echo #0")
 end)
 
-uv.run()
+uv.run(debug.traceback)
