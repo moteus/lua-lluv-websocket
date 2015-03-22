@@ -26,8 +26,9 @@ local config = {
   servers = {
     { agent = agent, url = url},
   },
+  -- cases = {"9.*"},
   cases = {"1.*", "2.*", "3.*", "4.*", "5.*", "6.*", "6.2.*", "7.*","10.*"},
-  ["exclude-cases"] = {"3.*", "6.4.2", "6.4.3", "6.4.4"},
+  ["exclude-cases"] = {"6.4.2", "6.4.3", "6.4.4"},
   ["exclude-agent-cases"] = {},
 }
 

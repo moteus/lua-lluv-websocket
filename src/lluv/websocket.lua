@@ -156,8 +156,8 @@ function SizedBuffer:read_n(...)
   return data
 end
 
-function SizedBuffer:read_some(...)
-  local data = base.read_some(self, ...)
+function SizedBuffer:read_some()
+  local data = base.read_some(self)
   if data then self._size = self._size - #data end
   return data
 end
@@ -717,6 +717,8 @@ local on_data = function(self, mode, cb, decoded, fin, opcode, masked, rsv1, rsv
   end
 end
 
+local on_raw_data_1 do
+
 local function next_frame(self)
   local encoded = self._buffer:read_some()
 
@@ -740,7 +742,7 @@ local function next_frame(self)
   end
 end
 
-local on_raw_data = function(self, data, cb, mode)
+on_raw_data_1 = function(self, data, cb, mode)
   if self._wait_size and self._buffer:size() < self._wait_size then
     return
   end
@@ -758,6 +760,39 @@ local on_raw_data = function(self, data, cb, mode)
     end
   end
 end
+
+end
+
+local on_raw_data_2 = function(self, data, cb, mode)
+  if self._wait_size and self._buffer:size() < self._wait_size then
+    return
+  end
+
+  local pos, encoded = 1, self._buffer:read_all()
+
+  while self._sock and self._read_cb == cb do
+    local decoded, fin, opcode, masked, rsv1, rsv2, rsv3
+
+    decoded, fin, opcode, pos, masked, rsv1, rsv2, rsv3 = frame.decode_by_pos(encoded, pos)
+  
+    if not decoded then
+      local rest = string.sub(encoded, pos)
+      self._wait_size = fin
+      self._buffer:prepend(rest)
+      return
+    end
+    self._wait_size = nil -- we can set it to 2 because header size >= 2
+
+    if trace then trace("RX>", self._state, frame_name(opcode), fin, masked, text(decoded), rsv1, rsv2, rsv3) end
+
+    if validate_frame(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3) then
+      local handler = is_data_opcode(opcode) and on_data or on_control
+      handler(self, mode, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
+    end
+  end
+end
+
+local on_raw_data = on_raw_data_2
 
 function WSSocket:_start_read(mode, cb)
   if type(mode) == 'function' then

@@ -72,15 +72,14 @@ end
 
 local decode_by_pos = function(encoded, pos)
   pos = pos or 1
+  local start = pos
   local size = #encoded
   local left = size - pos + 1
 
-  if left < 2 then return nil, 2 - left end
+  if left < 2 then return nil, 2 - left, nil, start end
 
   local pos, header, payload = read_n_bytes(encoded, pos, 2)
 
-  local opcode = bit.band(header,  bit_0_3)
-  local fin    = bit.band(header,  bit_7) ~= 0
   local masked = bit.band(payload, bit_7) ~= 0
   payload      = bit.band(payload, bit_0_6)
 
@@ -88,12 +87,12 @@ local decode_by_pos = function(encoded, pos)
   if payload > 125 then
     if payload == 126 then
       if left < 2 then
-        return nil, 2 - left
+        return nil, 2 - left, nil, start
       end
       pos, payload = read_int16(encoded, pos)
     elseif payload == 127 then
       if left < 8 then
-        return nil, 8 - left
+        return nil, 8 - left, nil, start
       end
       local high, low
       pos, high = read_int32(encoded, pos)
@@ -112,7 +111,7 @@ local decode_by_pos = function(encoded, pos)
   if masked then
     local tail_size = (payload + 4) - left
     if tail_size > 0 then
-      return nil, tail_size
+      return nil, tail_size, nil, start
     end
 
     local m1,m2,m3,m4
@@ -124,22 +123,28 @@ local decode_by_pos = function(encoded, pos)
   else
     local tail_size = payload - left
     if tail_size > 0 then
-      return nil, tail_size
+      return nil, tail_size, nil, start
     end
 
     decoded = string.sub(encoded, pos, pos + payload - 1)
     pos = pos + payload
   end
 
-  return decoded,fin,opcode,pos,masked
+  local fin    = bit.band(header, bit_7) ~= 0
+  local rsv1   = bit.band(header, bit_6) ~= 0
+  local rsv2   = bit.band(header, bit_5) ~= 0
+  local rsv3   = bit.band(header, bit_4) ~= 0
+  local opcode = bit.band(header, bit_0_3)
+
+  return decoded,fin,opcode,pos,masked,rsv1,rsv2,rsv3
 end
 
 local decode = function(encoded)
-  local decoded, fin, opcode, pos, masked = decode_by_pos(encoded, 1)
+  local decoded, fin, opcode, pos, masked, rsv1, rsv2, rsv3 = decode_by_pos(encoded, 1)
   local rest
   if decoded then
     local rest = encoded:sub(pos)
-    return decoded, fin, opcode, rest, masked
+    return decoded, fin, opcode, rest, masked, rsv1, rsv2, rsv3
   end
   return decoded, fin
 end
