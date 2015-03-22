@@ -29,12 +29,10 @@ local function pack_bytes(...)
 end
 
 local function pack_int16(v)
-  v = bit.band(v, 0xFFFF)
   return pack_bytes(bit.rshift(v, 8), bit.band(v, 0xFF))
 end
 
 local function pack_int32(v)
-  v = bit.band(v, 0xFFFFFFFF)
   return pack_bytes(
     bit.band(bit.rshift(v, 24), 0xFF),
     bit.band(bit.rshift(v, 16), 0xFF),
@@ -147,8 +145,7 @@ local decode = function(encoded)
 end
 
 local encode = function(data,opcode,masked,fin)
-  local encoded
-  local header = opcode or 1-- TEXT is default opcode
+  local header = opcode or 1 -- TEXT is default opcode
   if fin == nil or fin == true then
     header = bit.bor(header,bit_7)
   end
@@ -161,19 +158,22 @@ local encode = function(data,opcode,masked,fin)
   local len = #data
   if len < 126 then
     payload = bit.bor(payload,len)
-    encoded = pack_bytes(header, payload)
+    header  = pack_bytes(header, payload)
   elseif len <= 0xffff then
     payload = bit.bor(payload,126)
-    encoded = pack_bytes(header, payload) .. pack_int16(len)
+    header  = pack_bytes(header, payload,
+      bit.rshift(len, 8), bit.band(len, 0xFF) -- pack_int16(len)
+    )
   elseif len < 2^53 then
     local high = math.floor(len/2^32)
     local low = len - high*2^32
     payload = bit.bor(payload,127)
-    encoded = pack_bytes(header, payload) .. pack_int32(high) .. pack_int32(low)
+    header  = pack_bytes(header, payload) .. pack_int32(high) .. pack_int32(low)
   end
 
+  local encoded
   if not masked then
-    encoded = encoded .. data
+    encoded = header .. data
   else
     local m1 = math.random(0,0xff)
     local m2 = math.random(0,0xff)
@@ -181,7 +181,7 @@ local encode = function(data,opcode,masked,fin)
     local m4 = math.random(0,0xff)
     local mask = {m1,m2,m3,m4}
     encoded = table.concat{
-      encoded, pack_bytes(m1,m2,m3,m4),
+      header, pack_bytes(m1,m2,m3,m4),
       xor_mask(data, 1, mask, #data)
     }
   end
