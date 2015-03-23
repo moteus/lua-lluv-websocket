@@ -774,13 +774,12 @@ local on_raw_data_2 = function(self, data, cb, mode)
     local decoded, fin, opcode, masked, rsv1, rsv2, rsv3
 
     decoded, fin, opcode, pos, masked, rsv1, rsv2, rsv3 = frame.decode_by_pos(encoded, pos)
-  
+
     if not decoded then
-      local rest = string.sub(encoded, pos)
       self._wait_size = fin
-      self._buffer:prepend(rest)
-      return
+      break
     end
+
     self._wait_size = nil -- we can set it to 2 because header size >= 2
 
     if trace then trace("RX>", self._state, frame_name(opcode), fin, masked, text(decoded), rsv1, rsv2, rsv3) end
@@ -790,6 +789,9 @@ local on_raw_data_2 = function(self, data, cb, mode)
       handler(self, mode, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
     end
   end
+
+  local rest = string.sub(encoded, pos)
+  self._buffer:prepend(rest)
 end
 
 local on_raw_data = on_raw_data_2
