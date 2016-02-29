@@ -1,11 +1,10 @@
 local uwebsocket = require "lluv.websocket"
 local websocket  = require "websocket"
+local bit        = require "lluv.websocket.bit"
 
 assert(websocket.client.lluv)
 assert(websocket.client.lluv.sync)
 assert(websocket.server.lluv)
-
-local bit = require "websocket.bit"
 
 local ch = '\239'
 local m  = 0x0F
