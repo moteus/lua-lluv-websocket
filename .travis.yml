@@ -3,45 +3,42 @@ language: c
 python:
   - "2.7"
 
+sudo: false
+
 env:
-  global:
-    - LUAROCKS=2.2.0
   matrix:
-    - LUA=lua5.1
-    - LUA=lua5.2
-    # - LUA=lua5.3
-    - LUA=luajit
+    - LUA="lua 5.1"
+    - LUA="lua 5.2"
+    - LUA="lua 5.3"
+    - LUA="luajit 2.0"
+    - LUA="luajit 2.1"
 
 branches:
   only:
     - master
 
 before_install:
-  - sudo pip install autobahntestsuite
-  - bash .travis/setup_lua.sh
+  # install Lua
+  - pip install --user hererocks
+  - hererocks here -r^ --$LUA
+  - export PATH=$PATH:$PWD/here/bin
+
+  # lua-lluv-websocket debps
   - bash .travis/setup_uv.sh
   - bash .travis/setup_openssl.sh
-  - sudo luarocks install luacov-coveralls
-  # lua-websockets deps
-  - sudo luarocks install struct
-  - sudo luarocks install luasocket
-  - if [ "$LUA" == "lua5.1" ]; then
-      sudo luarocks install bit32;
+  - luarocks install lluv-ssl UV_DIR=$TRAVIS_BUILD_DIR/libuv
+  - luarocks install lbase64
+  - if [ "$LUA" == "lua 5.1" ]; then
+      luarocks install bit32;
     fi
-  - if [ "$LUA" == "lua5.3" ]; then
-      sudo luarocks install bit32;
-    fi
-  # lua-websockets
-  # - git clone https://github.com/moteus/lua-websockets.git -b fix-lua52-compat
-  # - cd lua-websockets
-  # - sudo luarocks make rockspecs/lua-websockets-scm-1.rockspec --deps-mode=none
-  # - cd $TRAVIS_BUILD_DIR
-  - sudo luarocks install lua-websockets-core --server=http://rocks.moonscript.org/dev --deps-mode=none
-  - sudo luarocks install lluv-ssl --server=http://rocks.moonscript.org/dev UV_DIR=$TRAVIS_BUILD_DIR/libuv
 
 install:
-  - sudo luarocks make rockspecs/lluv-websocket-scm-0.rockspec --deps-mode=none
-  - sudo luarocks make rockspecs/lua-websockets-lluv-scm-0.rockspec --deps-mode=none
+  - luarocks make rockspecs/lluv-websocket-scm-0.rockspec --deps-mode=none
+  - luarocks make rockspecs/lua-websockets-lluv-scm-0.rockspec --deps-mode=none
+
+before_script:
+  - pip install --user autobahntestsuite
+  - luarocks install luacov-coveralls
 
 script: 
   - cd test
@@ -54,10 +51,12 @@ script:
   - wstest -m fuzzingserver -s fuzzingserver_wss.json &
   - sleep 10
   - lua -lluacov ./autobahn_client_test.lua wss://127.0.0.1:9001
+  - lua -lluacov ./autobahn_wclient_test.lua wss://127.0.0.1:9001
   - killall wstest
   - lua -lluacov ./autobahn_server_test.lua ws://127.0.0.1:9002
   - lua -lluacov ./autobahn_server_test.lua wss://127.0.0.1:9002
   - lua -lluacov ./autobahn_wserver_test.lua ws://127.0.0.1:9002
+  - lua -lluacov ./autobahn_wserver_test.lua wss://127.0.0.1:9002
 
 after_success:
   - luacov-coveralls -v

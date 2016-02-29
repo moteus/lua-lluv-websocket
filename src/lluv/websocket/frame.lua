@@ -1,51 +1,16 @@
 -- Code based on https://github.com/lipp/lua-websockets
 
-local bit    = require "websocket.bit"
-local string = require "string"
-local table  = require "table"
-local math   = require "math"
+local string  = require "string"
+local table   = require "table"
+local math    = require "math"
+local bit     = require "lluv.websocket.bit"
+local tools   = require "lluv.websocket.tools"
 
-local function read_n_bytes(str, pos, n)
-  return pos+n, string.byte(str, pos, pos + n - 1)
-end
+local read_n_bytes, read_int16, read_int32, pack_bytes, pack_int16, pack_int32, bits =
+  tools.read_n_bytes, tools.read_int16, tools.read_int32,
+  tools.pack_bytes, tools.pack_int16, tools.pack_int32, tools.bits
 
-local function read_int16(str, pos)
-  local a, b pos,a,b = read_n_bytes(str, pos, 2)
-  return pos, bit.lshift(a, 8) + b
-end
-
-local function read_int32(str, pos)
-  local a, b, c, d
-  pos, a, b, c, d = read_n_bytes(str, pos, 4)
-  return pos,
-    bit.lshift(a, 24) + 
-    bit.lshift(b, 16) + 
-    bit.lshift(c, 8 ) + 
-    d
-end
-
-local function pack_bytes(...)
-  return string.char(...)
-end
-
-local function pack_int16(v)
-  return pack_bytes(bit.rshift(v, 8), bit.band(v, 0xFF))
-end
-
-local function pack_int32(v)
-  return pack_bytes(
-    bit.band(bit.rshift(v, 24), 0xFF),
-    bit.band(bit.rshift(v, 16), 0xFF),
-    bit.band(bit.rshift(v,  8), 0xFF),
-    bit.band(v, 0xFF)
-  )
-end
-
-local bits = function(...)
-  local n = 0
-  for _,bitn in pairs{...} do n = n + 2^bitn end
-  return n
-end
+local unpack  = unpack or table.unpack
 
 local bit_0_3 = bits(0,1,2,3)
 local bit_5   = bits(5)
@@ -224,10 +189,10 @@ return {
   decode        = decode,
   encode_close  = encode_close,
   decode_close  = decode_close,
-  CONTINUATION = 0,
-  TEXT = 1,
-  BINARY = 2,
-  CLOSE = 8,
-  PING = 9,
-  PONG = 10
+  CONTINUATION  = 0,
+  TEXT          = 1,
+  BINARY        = 2,
+  CLOSE         = 8,
+  PING          = 9,
+  PONG          = 10
 }

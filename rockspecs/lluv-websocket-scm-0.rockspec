@@ -14,7 +14,7 @@ description = {
 
 dependencies = {
   "lua >= 5.1, < 5.4",
-  "lua-websockets-core",
+  -- "lua-websockets-core",
   "lluv > 0.1.1",
 }
 
@@ -24,7 +24,10 @@ build = {
   modules = {
     ['lluv.websocket']                = 'src/lluv/websocket.lua',
     ['lluv.websocket.utf8']           = 'src/lluv/websocket/utf8.lua',
+    ['lluv.websocket.bit']            = 'src/lluv/websocket/bit.lua',
+    ['lluv.websocket.tools']          = 'src/lluv/websocket/tools.lua',
     ['lluv.websocket.frame']          = 'src/lluv/websocket/frame.lua',
+    ['lluv.websocket.handshake']      = 'src/lluv/websocket/handshake.lua',
     ['lluv.websocket.utf8_validator'] = 'src/lluv/websocket/utf8_validator.lua',
   }
 }

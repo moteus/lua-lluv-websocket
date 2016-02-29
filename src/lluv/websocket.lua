@@ -14,9 +14,9 @@ local trace -- = print
 
 local uv        = require "lluv"
 local ut        = require "lluv.utils"
-local tools     = require "websocket.tools"
+local tools     = require "lluv.websocket.tools"
 local frame     = require "lluv.websocket.frame"
-local handshake = require "websocket.handshake"
+local handshake = require "lluv.websocket.handshake"
 
 local ok, ssl   = pcall(require, 'lluv.ssl')
 if not ok then ssl = nil end
