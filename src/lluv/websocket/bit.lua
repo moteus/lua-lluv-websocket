@@ -41,6 +41,10 @@ else
   local BIT_LUA_5_3 = [[
   local bit = {}
 
+  function bit.bnot(a)
+    return ~a
+  end
+
   function bit.bor(a, b, ...)
     a = a | b
     if ... then return bit.bor(a, ...) end
@@ -67,6 +71,26 @@ else
     return a >> b
   end
 
+  local function rrotate(bits, a, b)
+    local d = a & 2^b-1
+    return (d << (bits-b)) | a >> b
+  end
+
+  local function lrotate(bits, a, b)
+    local mask = (2^b-1) << (bits - b)
+    d = (a & mask) >> (bits - b)
+    a = (a & ~mask) << b
+    return d | a
+  end
+
+  function bit32.rrotate(...)
+    return rrotate(64, ...)
+  end
+
+  function bit32.lrotate(...)
+    return lrotate(64, ...)
+  end
+
   local function wrap32(f) 
     return function(...) return f(...) & 0xFFFFFFFF end
   end
@@ -74,6 +98,14 @@ else
   local bit32 = {}
   for k, v in pairs(bit) do
     bit32[k] = wrap32(v)
+  end
+
+  function bit32.rrotate(...)
+    return rrotate(32, ...)
+  end
+
+  function bit32.lrotate(...)
+    return lrotate(32, ...)
   end
 
   return {
@@ -93,6 +125,6 @@ else
   end
 end
 
-local bit = load_bit()
+local bit = load_bit32()
 
 return bit

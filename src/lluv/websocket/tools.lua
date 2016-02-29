@@ -84,7 +84,7 @@ elseif name == 'digest' then
 end
 
 if not sha1_digest then
-local rol, bxor, bor, band, bnot = bit.rol, bit.bxor, bit.bor, bit.band, bit.bnot
+local rol, bxor, bor, band, bnot = bit.rol or bit.lrotate, bit.bxor, bit.bor, bit.band, bit.bnot
 local srep, schar = string.rep, string.char
 
 -- from wiki article, not particularly clever impl
