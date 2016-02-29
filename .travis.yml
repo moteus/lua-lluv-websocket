@@ -28,7 +28,7 @@ before_install:
   - bash .travis/setup_openssl.sh
   - luarocks install lluv-ssl UV_DIR=$TRAVIS_BUILD_DIR/libuv
   - luarocks install --server=http://luarocks.org/manifests/moteus lbase64
-  - luarocks install lmd5
+  - luarocks install luacrypto
   - if [ "$LUA" == "lua 5.1" ]; then
       luarocks install bit32;
     fi
