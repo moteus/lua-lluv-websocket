@@ -1,8 +1,7 @@
 -- Code based on https://github.com/lipp/lua-websockets
 
-local sha1 = require'websocket.tools'.sha1
-local base64 = require'websocket.tools'.base64
-local tinsert = table.insert
+local tools = require'lluv.websocket.tools'
+local sha1, base64 = tools.sha1, tools.base64
 
 local guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
@@ -53,12 +52,12 @@ local upgrade_request = function(req)
     'Sec-WebSocket-Version: 13',
   }
   if req.origin then
-    tinsert(lines,string.format('Origin: %s',req.origin))
+    lines[#lines + 1] = string.format('Origin: %s',req.origin)
   end
   if req.port and req.port ~= 80 then
     lines[2] = format('Host: %s:%d',req.host,req.port)
   end
-  tinsert(lines,'\r\n')
+  lines[#lines + 1] = '\r\n'
   return table.concat(lines,'\r\n')
 end
 
@@ -92,9 +91,9 @@ local accept_upgrade = function(request,protocols)
     string.format('Sec-WebSocket-Accept: %s',sec_websocket_accept(headers['sec-websocket-key'])),
   }
   if prot then
-    tinsert(lines,string.format('Sec-WebSocket-Protocol: %s',prot))
+    lines[#lines + 1] = string.format('Sec-WebSocket-Protocol: %s', prot)
   end
-  tinsert(lines,'\r\n')
+  lines[#lines + 1] = '\r\n'
   return table.concat(lines,'\r\n'),prot
 end
 
