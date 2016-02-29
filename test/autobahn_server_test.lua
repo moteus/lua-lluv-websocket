@@ -26,9 +26,9 @@ local config = {
   servers = {
     { agent = agent, url = url},
   },
-  cases = {"7.*"},
+  -- cases = {"7.*"},
   -- cases = {"9.*"},
-  -- cases = {"1.*", "2.*", "3.*", "4.*", "5.*", "6.*", "6.2.*", "7.*","10.*"},
+  cases = {"1.*", "2.*", "3.*", "4.*", "5.*", "6.*", "6.2.*", "7.*","10.*"},
   ["exclude-cases"] = {"6.4.2", "6.4.3", "6.4.4"},
   ["exclude-agent-cases"] = {},
 }
@@ -70,14 +70,18 @@ function runTest(cb)
         return server:close()
       end
 
+
       local cli = server:accept()
+
+      currentCaseId = currentCaseId + 1
+      print("Handshake test case " .. tostring(currentCaseId))
+
       cli:handshake(function(self, err, protocol)
         if err then
           print("Server handshake error:", err)
           return cli:close()
         end
 
-        currentCaseId = currentCaseId + 1
         print("Executing test case " .. tostring(currentCaseId))
 
         cli:start_read(function(self, err, message, opcode)

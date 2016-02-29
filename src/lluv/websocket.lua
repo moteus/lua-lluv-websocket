@@ -10,7 +10,7 @@
 --
 ------------------------------------------------------------------
 
-local trace -- = print
+local trace -- = function(...) print(os.date("[WS ][%x %X]"), ...) end
 
 local uv        = require "lluv"
 local ut        = require "lluv.utils"
@@ -441,9 +441,18 @@ function WSSocket:_server_handshake(cb)
       return cb(self, err)
     end
 
+    if trace then trace("WS RAW RX>", "HANDSHAKE", text(data)) end
+
     buffer:append(data)
     local request = buffer:read("*l")
     if not request then return end
+
+    if trace then trace("RX>", "HANDSHAKE", text(request)) end
+    if trace then
+      local msg = buffer:read_all()
+      buffer:append(msg)
+      trace("HANDSHAKE ADDITIONAL DATA:", hex(msg))
+    end
 
     sock:stop_read()
 
@@ -456,6 +465,8 @@ function WSSocket:_server_handshake(cb)
       err = WSError_handshake_faild(request)
       return cb(self, err)
     end
+
+    if trace then trace("TX>", "HANDSHAKE", text(response)) end
 
     local headers
     sock:write(response, function(sock, err)
