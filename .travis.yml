@@ -5,13 +5,19 @@ python:
 
 sudo: false
 
-env:
-  matrix:
-    - LUA="lua 5.1"
-    # - LUA="lua 5.2"
-    # - LUA="lua 5.3"
-    # - LUA="luajit 2.0"
-    # - LUA="luajit 2.1"
+matrix:
+  include:
+    - env: LUA="lua 5.1"
+    # - compiler: ": Lua51"
+    #   env: LUA="lua 5.1"
+    # - compiler: ": Lua52"
+    #   env: LUA="lua 5.2"
+    # - compiler: ": Lua53"
+    #   env: LUA="lua 5.3"
+    # - compiler: ": LuaJIT20"
+    #   env: LUA="luajit 2.0"
+    # - compiler: ": LuaJIT21"
+    #   env: LUA="luajit 2.1"
 
 cache:
   directories:
@@ -31,13 +37,13 @@ before_install:
   # lua-lluv-websocket debps
   - luarocks show lluv-ssl  || bash .travis/setup_uv.sh
   - luarocks show lluv-ssl  || bash .travis/setup_openssl.sh
-  # - luarocks show lluv-ssl  || luarocks install lluv-ssl UV_DIR=$TRAVIS_BUILD_DIR/libuv
-  - luarocks install lluv-ssl --server=http://luarocks.org/dev UV_DIR=$TRAVIS_BUILD_DIR/libuv
-  - luarocks show lbase64   || luarocks install --server=http://luarocks.org/manifests/moteus lbase64
-  - luarocks show luacrypto || luarocks install luacrypto
-  - luarocks show stacktraceplus || luarocks install stacktraceplus
+  # bug in lluv-ssl 0.1.0
+  - luarocks show lluv-ssl  || luarocks install lluv-ssl --server=http://luarocks.org/dev UV_DIR=$TRAVIS_BUILD_DIR/libuv
+  - luarocks show basexx    || luarocks install basexx
+  # - luarocks show lbase64   || luarocks install lbase64
+  # - luarocks show luacrypto || luarocks install luacrypto
   - if [ "$LUA" == "lua 5.1" ]; then
-      luarocks install bit32;
+      luarocks show bit32 || luarocks install bit32;
     fi
   - luarocks install --server=http://luarocks.org/dev lua-websockets-core --deps-mode=none
 
