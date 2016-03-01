@@ -26,12 +26,20 @@ local config = {
   servers = {
     { agent = agent, url = url},
   },
-  -- cases = {"7.*"},
-  -- cases = {"9.*"},
+  -- cases = {"9.*"}, -- perfomance
   cases = {"1.*", "2.*", "3.*", "4.*", "5.*", "6.*", "6.2.*", "7.*","10.*"},
   ["exclude-cases"] = {"6.4.2", "6.4.3", "6.4.4"},
   ["exclude-agent-cases"] = {},
 }
+
+if os.getenv('TRAVIS') == 'true' then
+  -- wstest 0.7.1
+  ----
+  -- it takes too long to execute this test on Travis
+  -- so wstest start next test `7.3.1` and get handshake timeout
+  -- and it fails
+  table.insert(config["exclude-cases"], "7.1.6")
+end
 
 function wstest(args, cb)
   return uv.spawn({
