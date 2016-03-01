@@ -7,17 +7,16 @@ sudo: false
 
 matrix:
   include:
-    - env: LUA="lua 5.1"
-    # - compiler: ": Lua51"
-    #   env: LUA="lua 5.1"
-    # - compiler: ": Lua52"
-    #   env: LUA="lua 5.2"
-    # - compiler: ": Lua53"
-    #   env: LUA="lua 5.3"
-    # - compiler: ": LuaJIT20"
-    #   env: LUA="luajit 2.0"
-    # - compiler: ": LuaJIT21"
-    #   env: LUA="luajit 2.1"
+    - compiler: ": Lua51"
+      env: LUA="lua 5.1"
+    - compiler: ": Lua52"
+      env: LUA="lua 5.2"
+    - compiler: ": Lua53"
+      env: LUA="lua 5.3"
+    - compiler: ": LuaJIT20"
+      env: LUA="luajit 2.0"
+    - compiler: ": LuaJIT21"
+      env: LUA="luajit 2.1"
 
 cache:
   directories:
@@ -29,6 +28,7 @@ branches:
     - master
 
 before_install:
+  - export CC=gcc
   # install Lua
   - pip install --user hererocks
   - hererocks here -r^ --$LUA
