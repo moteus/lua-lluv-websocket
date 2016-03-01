@@ -114,6 +114,7 @@ end
 end
 
 local ok, sync = pcall(require, 'websocket.client_lluv_sync')
+if not ok then sync = nil end
 
 return setmetatable({sync = sync},{__call = function(_, ...)
   return Client.new(...)
