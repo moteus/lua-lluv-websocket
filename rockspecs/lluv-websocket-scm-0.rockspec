@@ -28,6 +28,7 @@ build = {
     ['lluv.websocket.tools']          = 'src/lluv/websocket/tools.lua',
     ['lluv.websocket.frame']          = 'src/lluv/websocket/frame.lua',
     ['lluv.websocket.handshake']      = 'src/lluv/websocket/handshake.lua',
+    ['lluv.websocket.luasocket']      = 'src/lluv/websocket/luasocket.lua',
     ['lluv.websocket.utf8_validator'] = 'src/lluv/websocket/utf8_validator.lua',
   }
 }
