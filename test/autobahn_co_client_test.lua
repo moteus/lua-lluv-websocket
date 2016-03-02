@@ -1,9 +1,6 @@
-local uv     = require "lluv"
-local ut     = require "lluv.utils"
-local socket = require "lluv.websocket.luasocket"
-
-local stp = require "StackTracePlus"
-
+local uv        = require "lluv"
+local ut        = require "lluv.utils"
+local socket    = require "lluv.websocket.luasocket"
 local Autobahn  = require "./autobahn"
 
 local ctx do
@@ -87,7 +84,7 @@ local function runAll()
   currentCaseId = 1
   Autobahn.cleanReports(reportDir)
   getCaseCount(runNextCase)
-  uv.run(stp.stacktrace)
+  uv.run(debug.traceback)
 
   if not Autobahn.verifyReport(reportDir, agent, true) then
     return os.exit(-1)
