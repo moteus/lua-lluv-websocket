@@ -347,7 +347,7 @@ function WSSocket:write(msg, opcode, cb)
     if type(encoded) == 'table' then
       encoded = table.concat(encoded)
     end
-    trace("WS RAW TX>", os.time(), self._state, hex(encoded))
+    trace("WS RAW TX>", self._state, hex(encoded))
   end
 
   if not ok then return nil, err end
@@ -578,11 +578,14 @@ local function protocol_error(self, code, msg, read_cb, shutdown)
       if self._sock then self._sock:shutdown() end
     end)
   else
+    -- we call read callback so we have to prevent second call of read callback
+    -- But we have to continue read to wait CLOSE response so we can not stop_read
+    self._read_cb = nil
     self._state = 'CLOSE_PENDING2'
     self:write(encoded, CLOSE)
   end
 
-  return read_cb(self, WSError_EOF(self._code, self._reason))
+  return read_cb and read_cb(self, WSError_EOF(self._code, self._reason))
 end
 
 local validate_frame = function(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
@@ -728,6 +731,8 @@ local on_data = function(self, mode, cb, decoded, fin, opcode, masked, rsv1, rsv
   end
 end
 
+local function stub()end
+
 local on_raw_data_1 do
 
 local function next_frame(self)
@@ -781,7 +786,7 @@ local on_raw_data_2 = function(self, data, cb, mode)
 
   local pos, encoded = 1, self._buffer:read_all()
 
-  while self._sock and self._read_cb == cb do
+  while self._sock and (self._read_cb == cb or self._state == 'CLOSE_PENDING2' or self._state == 'WAIT_CLOSE') do
     local decoded, fin, opcode, masked, rsv1, rsv2, rsv3
 
     decoded, fin, opcode, pos, masked, rsv1, rsv2, rsv3 = frame.decode_by_pos(encoded, pos)
@@ -797,7 +802,7 @@ local on_raw_data_2 = function(self, data, cb, mode)
 
     if validate_frame(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3) then
       local handler = is_data_opcode(opcode) and on_data or on_control
-      handler(self, mode, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
+      handler(self, mode, self._read_cb or stub, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
     end
   end
 
@@ -820,15 +825,13 @@ function WSSocket:_start_read(mode, cb)
 
   local function do_read(cli, err, data)
     if data then
-      if trace then trace("WS RAW RX>", os.time(), self._state, cb, self._buffer:size(), self._wait_size, hex(data)) end
+      if trace then trace("WS RAW RX>", self._state, cb, self._buffer:size(), self._wait_size, hex(data)) end
       self._buffer:append(data)
     end
 
-    if self._read_cb ~= cb then return end
+    if trace and err then trace("WS RAW RX>", self._state, cb, err) end
 
     if err then
-      if trace then trace("WS RAW RX>", os.time(), self._state, cb, err) end
-
       self:_stop_read()
       self._sock:shutdown()
 
@@ -838,9 +841,15 @@ function WSSocket:_start_read(mode, cb)
         self._state = 'CLOSED'
       end
 
-      return cb(self, err)
+      if self._read_cb == cb then cb(self, err) end
+
+      return 
     end
 
+    -- we call it when user wait data
+    -- or e.g. when we get protocol error, send CLOSE to remote side
+    -- and wait CLOSE response. We already call user callback but library
+    -- should proceed control messages
     on_raw_data(self, data, cb, mode)
   end
 
