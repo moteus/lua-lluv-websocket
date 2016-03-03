@@ -2,7 +2,7 @@
 --
 --  Author: Alexey Melnichuk <alexeymelnichuck@gmail.com>
 --
---  Copyright (C) 2015 Alexey Melnichuk <alexeymelnichuck@gmail.com>
+--  Copyright (C) 2015-2016 Alexey Melnichuk <alexeymelnichuck@gmail.com>
 --
 --  Licensed according to the included 'LICENSE' document
 --
@@ -247,7 +247,10 @@ function WSSocket:__init(opt, s)
     end
   end
 
-  self._on_write = function(_, err, cb) cb(self, err) end
+  self._on_write = function(_, err, cb)
+    if trace then trace("WRITE>", err or 'PASS', cb) end
+    cb(self, err)
+  end
 
   return self
 end
@@ -347,7 +350,7 @@ function WSSocket:write(msg, opcode, cb)
     if type(encoded) == 'table' then
       encoded = table.concat(encoded)
     end
-    trace("WS RAW TX>", self._state, hex(encoded))
+    trace("WS RAW TX>", self._state, cb, hex(encoded))
   end
 
   if not ok then return nil, err end
@@ -511,6 +514,8 @@ local function start_close_timer(self, timeout)
 end
 
 function WSSocket:close(code, reason, cb)
+  if trace then trace('CLOSE>', self._state) end
+
   if not self._sock then return end
 
   if type(code) == 'function' then
@@ -786,7 +791,7 @@ local on_raw_data_2 = function(self, data, cb, mode)
 
   local pos, encoded = 1, self._buffer:read_all()
 
-  while self._sock and (self._read_cb == cb or self._state == 'CLOSE_PENDING2' or self._state == 'WAIT_CLOSE') do
+  while self._sock and (self._read_cb == cb or self._state == 'CLOSE_PENDING2') do
     local decoded, fin, opcode, masked, rsv1, rsv2, rsv3
 
     decoded, fin, opcode, pos, masked, rsv1, rsv2, rsv3 = frame.decode_by_pos(encoded, pos)

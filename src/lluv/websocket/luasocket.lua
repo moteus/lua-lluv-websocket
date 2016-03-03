@@ -1,3 +1,15 @@
+------------------------------------------------------------------
+--
+--  Author: Alexey Melnichuk <alexeymelnichuck@gmail.com>
+--
+--  Copyright (C) 2016 Alexey Melnichuk <alexeymelnichuck@gmail.com>
+--
+--  Licensed according to the included 'LICENSE' document
+--
+--  This file is part of lua-lluv-websocket library.
+--
+------------------------------------------------------------------
+
 ---
 -- Implement LuaSocket API on top of WebSocket
 --
@@ -15,6 +27,8 @@
 -- 
 -- socket:send(frame[, opcode])
 -- 
+
+local trace -- = function(...) print(os.date("[LWS][%x %X]"), ...) end
 
 local uv     = require "lluv"
 local ut     = require "lluv.utils"
@@ -98,12 +112,16 @@ function WsSocket:send(data, opcode)
   if not self._sock then return nil, self._err end
 
   local terminated
-  self:_start("write")
-  self._sock:write(data, opcode, function(cli, err)
+  local function fn(cli, err)
+    if trace then trace("SEND CB>", self, #data, opcode, fn) end
     if terminated then return end
     if err then return self:_on_io_error(err) end
     return self:_resume(true)
-  end)
+  end;
+  if trace then trace("SEND>", self, #data, opcode, fn) end
+
+  self:_start("write")
+  self._sock:write(data, opcode, fn)
 
   local ok, err = self:_yield()
   terminated = true

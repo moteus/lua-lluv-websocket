@@ -1,3 +1,5 @@
+local trace = function() end -- = function(...) print(os.date("[TST][%x %X]"), ...) end
+
 local uv        = require "lluv"
 local ut        = require "lluv.utils"
 local socket    = require "lluv.websocket.luasocket"
@@ -39,6 +41,7 @@ end
 local function runTestCase(no, cb)
   ut.corun(function()
     local cli = Client()
+    trace("Connect")
     local ok, err = cli:connect(Autobahn.Server.runTestCase(URI, no, agent))
     if not ok then
       cli:close()
@@ -48,13 +51,20 @@ local function runTestCase(no, cb)
     print("Executing test case " .. no .. "/" .. caseCount)
 
     while true do
+      trace("receiving...", cli)
       local msg, opcode = cli:receive("*l")
+      trace("received", msg and #msg, opcode)
       if not msg then break end
       if opcode == socket.TEXT or opcode == socket.BINARY then
-        cli:send(msg, opcode)
+        trace("sending...", cli)
+        trace("sended", cli:send(msg, opcode))
+        trace("After", cli)
       end
     end
-    cli:close()
+
+    trace("Closing...", cli)
+    trace("Closed", cli:close())
+
     uv.defer(cb)
   end)
 end

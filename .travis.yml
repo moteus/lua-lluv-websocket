@@ -37,15 +37,16 @@ before_install:
   # lua-lluv-websocket debps
   - luarocks show lluv-ssl  || bash .travis/setup_uv.sh
   - luarocks show lluv-ssl  || bash .travis/setup_openssl.sh
-  # bug in lluv-ssl 0.1.0
-  - luarocks show lluv-ssl  || luarocks install lluv-ssl --server=http://luarocks.org/dev UV_DIR=$TRAVIS_BUILD_DIR/libuv
+  # bug in lluv 0.1.3 and in lluv-ssl 0.1.0
+  - luarocks show lluv      || luarocks install lluv     --server=http://luarocks.org/dev UV_DIR=$TRAVIS_BUILD_DIR/libuv
+  - luarocks show lluv-ssl  || luarocks install lluv-ssl --server=http://luarocks.org/dev
   - luarocks show basexx    || luarocks install basexx
   # - luarocks show lbase64   || luarocks install lbase64
   # - luarocks show luacrypto || luarocks install luacrypto
   - if [ "$LUA" == "lua 5.1" ]; then
       luarocks show bit32 || luarocks install bit32;
     fi
-  - luarocks install --server=http://luarocks.org/dev lua-websockets-core --deps-mode=none
+  - luarocks show lua-websockets-core || luarocks install lua-websockets-core --server=http://luarocks.org/dev --deps-mode=none
 
 install:
   - luarocks make rockspecs/lluv-websocket-scm-0.rockspec --deps-mode=none
