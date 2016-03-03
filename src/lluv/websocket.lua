@@ -791,7 +791,9 @@ local on_raw_data_2 = function(self, data, cb, mode)
 
   local pos, encoded = 1, self._buffer:read_all()
 
-  while self._sock and (self._read_cb == cb or self._state == 'CLOSE_PENDING2') do
+  while self._sock and (self._read_cb == cb or self._state == 'CLOSE_PENDING2' or self._state == 'WAIT_CLOSE') do
+    if trace then trace("RAW_ITER>", self._state) end
+
     local decoded, fin, opcode, masked, rsv1, rsv2, rsv3
 
     decoded, fin, opcode, pos, masked, rsv1, rsv2, rsv3 = frame.decode_by_pos(encoded, pos)
