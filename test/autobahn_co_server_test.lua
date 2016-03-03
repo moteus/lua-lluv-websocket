@@ -121,6 +121,6 @@ runTest(function()
   print"DONE"
 end)
 
-uv.run(require "stacktraceplus".stacktrace)
+uv.run(debug.traceback)
 
 os.exit(exitCode)
