@@ -705,7 +705,7 @@ local on_data = function(self, mode, cb, decoded, fin, opcode, masked, rsv1, rsv
     if opcode == CONTINUATION then
       return protocol_error(self, 1002, "Unexpected continuation frame", cb, true)
     else
-      self._frames, self._opcode = {}, opcode
+      self._frames, self._opcode = (mode == '*f') or {}, opcode
     end
   else
     if opcode ~= CONTINUATION then
@@ -720,6 +720,9 @@ local on_data = function(self, mode, cb, decoded, fin, opcode, masked, rsv1, rsv
   end
 
   if mode == '*f' then
+    if fin == true then
+      self._frames, self._opcode = nil
+    end
     cb(self, nil, decoded, opcode, fin)
   else
     if #decoded > 0 then
