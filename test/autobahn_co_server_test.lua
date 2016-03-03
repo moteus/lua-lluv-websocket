@@ -16,7 +16,7 @@ end
 
 local reportDir = "./reports/servers"
 local url       = arg[1] or "ws://127.0.0.1:9000"
-local agent     = string.format("lluv-websocket (%s / %s)",
+local agent     = string.format("lluv-co-websocket (%s / %s)",
   jit and jit.version or _VERSION, 
   url:lower():match("^wss:") and "WSS" or "WS"
 )
