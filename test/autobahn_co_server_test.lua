@@ -21,6 +21,7 @@ local agent     = string.format("lluv-co-websocket (%s / %s)",
   url:lower():match("^wss:") and "WSS" or "WS"
 )
 local exitCode  = -1
+local read_pat  = arg[2] or "*l"
 
 local config = {
   outdir = reportDir,
@@ -41,6 +42,15 @@ if os.getenv('TRAVIS') == 'true' then
   -- so wstest start next test `7.3.1` and get handshake timeout
   -- and it fails
   table.insert(config["exclude-cases"], "7.1.6")
+end
+
+if read_pat == '*r' then
+  -- wstest 0.7.1
+  ----
+  -- Remote side detect invalid utf8 earlier than me
+  -- Problem in ut8 validator which detect it too late
+  --
+  table.insert(config["exclude-cases"], "6.3.2")
 end
 
 function wstest(args, cb)
@@ -67,14 +77,14 @@ function runTest(cb)
     print("Executing test case " .. tostring(currentCaseId))
 
     while true do
-      local message, opcode = cli:receive("*l")
+      local message, opcode, fin = cli:receive(read_pat)
       if not message then
         print("Server read error:", opcode)
         break
       end
 
       if opcode == websocket.CONTINUATION or opcode == websocket.TEXT or opcode == websocket.BINARY then
-        cli:send(message, opcode)
+        cli:send(message, opcode, fin)
       end
     end
     return cli:close()

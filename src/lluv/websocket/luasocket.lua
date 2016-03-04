@@ -108,20 +108,20 @@ function WsSocket:receive(mode)
   end
 end
 
-function WsSocket:send(data, opcode)
+function WsSocket:send(data, opcode, fin)
   if not self._sock then return nil, self._err end
 
   local terminated
   local function fn(cli, err)
-    if trace then trace("SEND CB>", self, #data, opcode, fn) end
+    if trace then trace("SEND CB>", self, #data, opcode, fin, fn) end
     if terminated then return end
     if err then return self:_on_io_error(err) end
     return self:_resume(true)
   end;
-  if trace then trace("SEND>", self, #data, opcode, fn) end
+  if trace then trace("SEND>", self, #data, opcode, fin, fn) end
 
   self:_start("write")
-  self._sock:write(data, opcode, fn)
+  self._sock:write(data, opcode, fin, fn)
 
   local ok, err = self:_yield()
   terminated = true
