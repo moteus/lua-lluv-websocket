@@ -66,10 +66,6 @@ function wstest(args, cb)
   end)
 end
 
-function isWSEOF(err)
-  return err:name() == 'EOF' and err.cat and err:cat() == 'WEBSOCKET'
-end
-
 function runTest(cb)
   local currentCaseId = 0
 
@@ -80,7 +76,9 @@ function runTest(cb)
     while true do
       local message, opcode, fin = cli:receive(read_pat)
       if not message then
-        print("Server read error:", opcode)
+        if opcode ~= 'closed' then
+          print("Server read error:", opcode)
+        end
         break
       end
 
@@ -96,7 +94,7 @@ function runTest(cb)
     local ok, err = server:bind(url, 'echo')
 
     if not ok then
-      print("Server error:", err)
+      print("Server bind error:", err)
       return server:close()
     end
 
