@@ -37,9 +37,8 @@ before_install:
   # lua-lluv-websocket debps
   - luarocks show lluv-ssl  || bash .travis/setup_uv.sh
   - luarocks show lluv-ssl  || bash .travis/setup_openssl.sh
-  # bug in lluv 0.1.3 and in lluv-ssl 0.1.0
-  - luarocks show lluv      || luarocks install lluv     --server=http://luarocks.org/dev UV_DIR=$TRAVIS_BUILD_DIR/libuv
-  - luarocks show lluv-ssl  || luarocks install lluv-ssl --server=http://luarocks.org/dev
+  - luarocks show lluv      || luarocks install lluv     UV_DIR=$TRAVIS_BUILD_DIR/libuv
+  - luarocks show lluv-ssl  || luarocks install lluv-ssl 
   - luarocks show basexx    || luarocks install basexx
   # - luarocks show lbase64   || luarocks install lbase64
   # - luarocks show luacrypto || luarocks install luacrypto
@@ -83,9 +82,9 @@ script:
   - lua -lluacov ./autobahn_co_server_test.lua ws://127.0.0.1:9002
 
   #                         Server tests (WSS)
-  # - lua -lluacov ./autobahn_server_test.lua wss://127.0.0.1:9002
-  # - lua -lluacov ./autobahn_wserver_test.lua wss://127.0.0.1:9002
-  # - lua -lluacov ./autobahn_co_server_test.lua wss://127.0.0.1:9002
+  - lua -lluacov ./autobahn_server_test.lua wss://127.0.0.1:9002
+  - lua -lluacov ./autobahn_wserver_test.lua wss://127.0.0.1:9002
+  - lua -lluacov ./autobahn_co_server_test.lua wss://127.0.0.1:9002
 
   #                         Read mode tests
   - lua -lluacov ./autobahn_server_test.lua ws://127.0.0.1:9002 '*f'
