@@ -195,7 +195,7 @@ end
 ------------------------------------------------------------------
 
 ------------------------------------------------------------------
-local decode_write_args
+local decode_write_args, on_raw_data_by_pos, on_raw_data_by_chunk
 local WSSocket = ut.class() do
 
 -- State:
@@ -808,7 +808,9 @@ on_raw_data_1 = function(self, data, cb, mode)
     return
   end
 
-  while self._sock and self._read_cb == cb do
+  while self._sock and (self._read_cb == cb or self._state == 'CLOSE_PENDING2' or self._state == 'WAIT_CLOSE') do
+    if trace then trace("RAW_ITER>", self._state) end
+
     local decoded, fin, opcode, masked, rsv1, rsv2, rsv3 = next_frame(self)
 
     if not decoded then break end
@@ -817,7 +819,7 @@ on_raw_data_1 = function(self, data, cb, mode)
 
     if validate_frame(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3) then
       local handler = is_data_opcode(opcode) and on_data or on_control
-      handler(self, mode, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
+      handler(self, mode, self._read_cb or stub, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
     end
   end
 end
@@ -857,7 +859,10 @@ local on_raw_data_2 = function(self, data, cb, mode)
   self._buffer:prepend(rest)
 end
 
-local on_raw_data = on_raw_data_2
+WSSocket._on_raw_data = on_raw_data_2
+
+-- export to be able run tests
+on_raw_data_by_pos, on_raw_data_by_chunk = on_raw_data_2, on_raw_data_1
 
 function WSSocket:_start_read(mode, cb)
   if type(mode) == 'function' then
@@ -897,7 +902,7 @@ function WSSocket:_start_read(mode, cb)
     -- or e.g. when we get protocol error, send CLOSE to remote side
     -- and wait CLOSE response. We already call user callback but library
     -- should proceed control messages
-    on_raw_data(self, data, cb, mode)
+    self:_on_raw_data(data, cb, mode)
   end
 
   if self._read_cb then
@@ -1110,5 +1115,8 @@ return {
   CONTINUATION = CONTINUATION;
   CLOSE        = CLOSE;
 
-  __self_test  = self_test;
+  -- !!! NOT PUBLIC API !!! --
+  __self_test            = self_test;
+  __on_raw_data_by_pos   = on_raw_data_by_pos;
+  __on_raw_data_by_chunk = on_raw_data_by_chunk;
 }

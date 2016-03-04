@@ -90,6 +90,7 @@ script:
   #                         Read mode tests
   - lua -lluacov ./autobahn_server_test.lua ws://127.0.0.1:9002 '*f'
   - lua -lluacov ./autobahn_server_test.lua ws://127.0.0.1:9002 '*t'
+  - lua -lluacov ./autobahn_server_test.lua ws://127.0.0.1:9002 '*s' 'chunk'
   - lua -lluacov ./autobahn_co_server_test.lua ws://127.0.0.1:9002 '*r'
 
 after_success:

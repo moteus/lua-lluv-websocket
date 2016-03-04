@@ -13,14 +13,15 @@ local ctx do
   end
 end
 
-local reportDir = "./reports/servers"
-local url       = arg[1] or "ws://127.0.0.1:9000"
-local agent     = string.format("lluv-websocket (%s / %s)",
+local reportDir   = "./reports/servers"
+local url         = arg[1] or "ws://127.0.0.1:9000"
+local agent       = string.format("lluv-websocket (%s / %s)",
   jit and jit.version or _VERSION, 
   url:lower():match("^wss:") and "WSS" or "WS"
 )
-local exitCode  = -1
-local read_pat  = arg[2] or "*s"
+local exitCode    = -1
+local read_pat    = arg[2] or "*s"
+local decode_mode = arg[3] or "pos"
 local verbose   = false
 
 local config = {
@@ -70,7 +71,7 @@ end
 
 function runTest(cb)
   print(" URL:", url)
-  print("MODE:", read_pat)
+  print("MODE:", read_pat .. "/" .. decode_mode)
 
   local currentCaseId = 0
   local server = websocket.new{ssl = ctx, utf8 = true}
@@ -92,8 +93,10 @@ function runTest(cb)
         return server:close()
       end
 
-
       local cli = server:accept()
+      if decode_mode == "chunk" then
+        cli._on_raw_data = assert(websocket.__on_raw_data_by_chunk)
+      end
 
       currentCaseId = currentCaseId + 1
       if verbose then
