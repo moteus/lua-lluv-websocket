@@ -20,6 +20,7 @@ local agent     = string.format("lluv-websocket (%s / %s)",
   url:lower():match("^wss:") and "WSS" or "WS"
 )
 local exitCode  = -1
+local read_pat  = arg[2] or "*s"
 
 local config = {
   outdir = reportDir,
@@ -41,6 +42,15 @@ if os.getenv('TRAVIS') == 'true' then
   table.insert(config["exclude-cases"], "7.1.6")
 end
 
+if read_pat == '*f' then
+  -- wstest 0.7.1
+  ----
+  -- Remote side detect invalid utf8 earlier than me
+  -- Problem in ut8 validator which detect it too late
+  --
+  table.insert(config["exclude-cases"], "6.3.2")
+end
+
 function wstest(args, cb)
   return uv.spawn({
     file = "wstest",
@@ -58,6 +68,9 @@ function isWSEOF(err)
 end
 
 function runTest(cb)
+  print(" URL:", url)
+  print("MODE:", read_pat)
+
   local currentCaseId = 0
   local server = websocket.new{ssl = ctx, utf8 = true}
   server:bind(url, "echo", function(self, err)
@@ -92,7 +105,7 @@ function runTest(cb)
 
         print("Executing test case " .. tostring(currentCaseId))
 
-        cli:start_read(function(self, err, message, opcode)
+        cli:start_read(read_pat, function(self, err, message, opcode, fin)
           if err then
             if not isWSEOF(err) then
               print("Server read error:", err)
@@ -100,8 +113,8 @@ function runTest(cb)
             return cli:close()
           end
 
-          if opcode == websocket.TEXT or opcode == websocket.BINARY then
-            cli:write(message, opcode)
+          if opcode == websocket.CONTINUATION or opcode == websocket.TEXT or opcode == websocket.BINARY then
+            cli:write(message, opcode, fin)
           end
         end)
       end)

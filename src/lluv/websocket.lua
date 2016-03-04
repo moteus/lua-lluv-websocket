@@ -73,6 +73,7 @@ local ERRORS = {
   [-4] = "ENOSUP";
 }
 
+------------------------------------------------------------------
 local WSError = ut.class() do
 
 for k, v in pairs(ERRORS) do WSError[v] = k end
@@ -113,6 +114,7 @@ function WSError:__eq(rhs)
 end
 
 end
+------------------------------------------------------------------
 
 local function WSError_handshake_faild(msg)
   return WSError.new(WSError.EHANDSHAKE, nil, "Handshake failed", msg)
@@ -130,6 +132,7 @@ local function WSError_ENOSUP(msg)
   return WSError.new(WSError.ENOSUP, nil, msg)
 end
 
+------------------------------------------------------------------
 local SizedBuffer = ut.class(ut.Buffer) do
 local base = SizedBuffer.__base
 
@@ -189,7 +192,10 @@ function SizedBuffer:size()
 end
 
 end
+------------------------------------------------------------------
 
+------------------------------------------------------------------
+local decode_write_args
 local WSSocket = ut.class() do
 
 -- State:
@@ -311,17 +317,48 @@ function WSSocket:connect(url, proto, cb)
   return self
 end
 
-function WSSocket:write(msg, opcode, cb)
-  if type(opcode) == 'function' then cb, opcode = opcode end
+decode_write_args = function(msg, opcode, fin, cb)
+  if not cb then
+    local topcode =  type(opcode)
+    if topcode == 'number' then
+      if type(fin) == 'function' then
+        fin, cb = true, fin
+      elseif fin == nil then
+        fin = true
+      end
+    elseif topcode == 'boolean' then
+      fin, cb, opcode = opcode, fin
+    elseif topcode == 'function' then
+      opcode, fin, cb = nil, true, opcode
+    else
+      if opcode == nil then
+        if type(fin) == 'function' then
+          fin, cb = true, fin
+        elseif fin == nil then
+          fin = true
+        end
+        opcode = nil
+      else
+        fin, opcode = fin
+      end
+    end
+  else
+    if fin == nil then fin = true end
+  end
 
-  opcode = opcode or TEXT
+  return msg, opcode or TEXT, not not fin, cb
+end
+
+function WSSocket:write(msg, opcode, fin, cb)
+  msg, opcode, fin, cb = decode_write_args(msg, opcode, fin, cb)
+
   local encoded
   if type(msg) == "table" then
     if msg[1] then
       if trace then trace("TX>", self._state, frame_name(opcode), 1 == #msg, self._masked, text(msg[1])) end
 
       encoded = {
-        frame.encode(msg[1], opcode, self._masked, 1 == #msg)
+        frame.encode(msg[1], opcode, self._masked, fin and 1 == #msg)
       }
 
       for i = 2, #msg do
@@ -329,17 +366,17 @@ function WSSocket:write(msg, opcode, cb)
           if trace then trace("TX>", self._state, frame_name(opcode), i == #msg, self._masked, text(msg[i])) end
 
           table.insert(encoded,
-            frame.encode(msg[i], CONTINUATION, self._masked, i == #msg)
+            frame.encode(msg[i], CONTINUATION, self._masked, fin and i == #msg)
           )
         end
       end
     else
       if trace then trace("TX>", self._state, frame_name(opcode), true, self._masked, text('')) end
-      encoded = frame.encode('', opcode, self._masked)
+      encoded = frame.encode('', opcode, self._masked, fin)
     end
   else
     if trace then trace("TX>", self._state, frame_name(opcode), true, self._masked, text(msg)) end
-    encoded = frame.encode(msg, opcode, self._masked)
+    encoded = frame.encode(msg, opcode, self._masked, fin)
   end
 
   local ok, err
@@ -974,6 +1011,93 @@ function WSSocket:getpeername()
 end
 
 end
+------------------------------------------------------------------
+
+local function self_test()
+
+  do -- decode_write_args 
+  local function dummy()end
+
+  local msg, opcode, fin, cb = decode_write_args("") do
+  assert(msg    == ""  , "`" .. tostring(msg   ) .. "` type: " .. type(msg   ) )
+  assert(opcode == TEXT, "`" .. tostring(opcode) .. "` type: " .. type(opcode) )
+  assert(fin    == true, "`" .. tostring(fin   ) .. "` type: " .. type(fin   ) )
+  assert(cb     == nil , "`" .. tostring(cb    ) .. "` type: " .. type(cb    ) )
+  end
+
+  local msg, opcode, fin, cb = decode_write_args("", BINARY) do
+  assert(msg    == ""  ,   "`" .. tostring(msg   ) .. "` type: " .. type(msg   ) )
+  assert(opcode == BINARY, "`" .. tostring(opcode) .. "` type: " .. type(opcode) )
+  assert(fin    == true,   "`" .. tostring(fin   ) .. "` type: " .. type(fin   ) )
+  assert(cb     == nil ,   "`" .. tostring(cb    ) .. "` type: " .. type(cb    ) )
+  end
+
+  local msg, opcode, fin, cb = decode_write_args("", BINARY, false) do
+  assert(msg    == ""  ,   "`" .. tostring(msg   ) .. "` type: " .. type(msg   ) )
+  assert(opcode == BINARY, "`" .. tostring(opcode) .. "` type: " .. type(opcode) )
+  assert(fin    == false,  "`" .. tostring(fin   ) .. "` type: " .. type(fin   ) )
+  assert(cb     == nil ,   "`" .. tostring(cb    ) .. "` type: " .. type(cb    ) )
+  end
+
+  local msg, opcode, fin, cb = decode_write_args("", BINARY, dummy) do
+  assert(msg    == ""  ,   "`" .. tostring(msg   ) .. "` type: " .. type(msg   ) )
+  assert(opcode == BINARY, "`" .. tostring(opcode) .. "` type: " .. type(opcode) )
+  assert(fin    == true,   "`" .. tostring(fin   ) .. "` type: " .. type(fin   ) )
+  assert(cb     == dummy , "`" .. tostring(cb    ) .. "` type: " .. type(cb    ) )
+  end
+
+  local msg, opcode, fin, cb = decode_write_args("", false) do
+  assert(msg    == ""  ,   "`" .. tostring(msg   ) .. "` type: " .. type(msg   ) )
+  assert(opcode == TEXT,   "`" .. tostring(opcode) .. "` type: " .. type(opcode) )
+  assert(fin    == false,  "`" .. tostring(fin   ) .. "` type: " .. type(fin   ) )
+  assert(cb     == nil,    "`" .. tostring(cb    ) .. "` type: " .. type(cb    ) )
+  end
+
+  local msg, opcode, fin, cb = decode_write_args("", false,  dummy) do
+  assert(msg    == ""  ,   "`" .. tostring(msg   ) .. "` type: " .. type(msg   ) )
+  assert(opcode == TEXT,   "`" .. tostring(opcode) .. "` type: " .. type(opcode) )
+  assert(fin    == false,  "`" .. tostring(fin   ) .. "` type: " .. type(fin   ) )
+  assert(cb     == dummy , "`" .. tostring(cb    ) .. "` type: " .. type(cb    ) )
+  end
+
+  local msg, opcode, fin, cb = decode_write_args("", dummy) do
+  assert(msg    == ""  ,   "`" .. tostring(msg   ) .. "` type: " .. type(msg   ) )
+  assert(opcode == TEXT,   "`" .. tostring(opcode) .. "` type: " .. type(opcode) )
+  assert(fin    == true,   "`" .. tostring(fin   ) .. "` type: " .. type(fin   ) )
+  assert(cb     == dummy , "`" .. tostring(cb    ) .. "` type: " .. type(cb    ) )
+  end
+
+  local msg, opcode, fin, cb = decode_write_args("", nil, dummy) do
+  assert(msg    == ""  ,  "`" .. tostring(msg   ) .. "` type: " .. type(msg   ) )
+  assert(opcode == TEXT,  "`" .. tostring(opcode) .. "` type: " .. type(opcode) )
+  assert(fin    == true,  "`" .. tostring(fin   ) .. "` type: " .. type(fin   ) )
+  assert(cb     == dummy, "`" .. tostring(cb    ) .. "` type: " .. type(cb    ) )
+  end
+
+  local msg, opcode, fin, cb = decode_write_args("", nil, false) do
+  assert(msg    == ""  ,   "`" .. tostring(msg   ) .. "` type: " .. type(msg   ) )
+  assert(opcode == TEXT,   "`" .. tostring(opcode) .. "` type: " .. type(opcode) )
+  assert(fin    == false,  "`" .. tostring(fin   ) .. "` type: " .. type(fin   ) )
+  assert(cb     == nil,    "`" .. tostring(cb    ) .. "` type: " .. type(cb    ) )
+  end
+
+  local msg, opcode, fin, cb = decode_write_args("", nil, nil, dummy) do
+  assert(msg    == ""  ,   "`" .. tostring(msg   ) .. "` type: " .. type(msg   ) )
+  assert(opcode == TEXT,   "`" .. tostring(opcode) .. "` type: " .. type(opcode) )
+  assert(fin    == true,   "`" .. tostring(fin   ) .. "` type: " .. type(fin   ) )
+  assert(cb     == dummy,  "`" .. tostring(cb    ) .. "` type: " .. type(cb    ) )
+  end
+
+  local msg, opcode, fin, cb = decode_write_args("", nil, false, dummy) do
+  assert(msg    == ""  ,   "`" .. tostring(msg   ) .. "` type: " .. type(msg   ) )
+  assert(opcode == TEXT,   "`" .. tostring(opcode) .. "` type: " .. type(opcode) )
+  assert(fin    == false,  "`" .. tostring(fin   ) .. "` type: " .. type(fin   ) )
+  assert(cb     == dummy,  "`" .. tostring(cb    ) .. "` type: " .. type(cb    ) )
+  end
+
+  end
+
+end
 
 return {
   new = WSSocket.new;
@@ -985,4 +1109,6 @@ return {
 
   CONTINUATION = CONTINUATION;
   CLOSE        = CLOSE;
+
+  __self_test  = self_test;
 }

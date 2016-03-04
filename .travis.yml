@@ -63,6 +63,8 @@ script:
   - wstest -m fuzzingserver &
   - sleep 10
   - lua -lluacov ./autobahn_client_test.lua ws://127.0.0.1:9001
+  - lua -lluacov ./autobahn_client_test.lua ws://127.0.0.1:9001 *f
+  - lua -lluacov ./autobahn_client_test.lua ws://127.0.0.1:9001 *t
   - lua -lluacov ./autobahn_wclient_test.lua ws://127.0.0.1:9001
   - lua -lluacov ./autobahn_co_client_test.lua ws://127.0.0.1:9001
   - killall wstest

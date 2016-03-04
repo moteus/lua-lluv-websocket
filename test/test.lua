@@ -17,3 +17,4 @@ print("AND :", a)
 print("CAND:", string.char(a))
 print("CMSK:", string.char(v))
 
+uwebsocket.__self_test()
