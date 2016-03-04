@@ -60,26 +60,37 @@ before_script:
 script: 
   - cd test
   - lua test.lua
-  - wstest -m fuzzingserver &
-  - sleep 10
-  - lua -lluacov ./autobahn_client_test.lua ws://127.0.0.1:9001
-  - lua -lluacov ./autobahn_wclient_test.lua ws://127.0.0.1:9001
-  - lua -lluacov ./autobahn_co_client_test.lua ws://127.0.0.1:9001
-  - killall wstest
-  - wstest -m fuzzingserver -s fuzzingserver_wss.json &
-  - sleep 10
-  - lua -lluacov ./autobahn_client_test.lua wss://127.0.0.1:9001
-  - lua -lluacov ./autobahn_wclient_test.lua wss://127.0.0.1:9001
-  - lua -lluacov ./autobahn_co_client_test.lua wss://127.0.0.1:9001
-  - killall wstest
-  - lua -lluacov ./autobahn_server_test.lua ws://127.0.0.1:9002
+
+  #                         Client tests
+  # - wstest -m fuzzingserver &
+  # - sleep 10
+  # - lua -lluacov ./autobahn_client_test.lua ws://127.0.0.1:9001
+  # - lua -lluacov ./autobahn_wclient_test.lua ws://127.0.0.1:9001
+  # - lua -lluacov ./autobahn_co_client_test.lua ws://127.0.0.1:9001
+  # - killall wstest
+
+  #                         Client tests (WSS)
+  # - wstest -m fuzzingserver -s fuzzingserver_wss.json &
+  # - sleep 10
+  # - lua -lluacov ./autobahn_client_test.lua wss://127.0.0.1:9001
+  # - lua -lluacov ./autobahn_wclient_test.lua wss://127.0.0.1:9001
+  # - lua -lluacov ./autobahn_co_client_test.lua wss://127.0.0.1:9001
+  # - killall wstest
+
+  #                         Server tests
+  # - lua -lluacov ./autobahn_server_test.lua ws://127.0.0.1:9002
+  # - lua -lluacov ./autobahn_wserver_test.lua ws://127.0.0.1:9002
+  # - lua -lluacov ./autobahn_co_server_test.lua ws://127.0.0.1:9002
+
+  #                         Server tests (WSS)
+  # - lua -lluacov ./autobahn_server_test.lua wss://127.0.0.1:9002
+  # - lua -lluacov ./autobahn_wserver_test.lua wss://127.0.0.1:9002
+  # - lua -lluacov ./autobahn_co_server_test.lua wss://127.0.0.1:9002
+
+  #                         Read mode tests
   - lua -lluacov ./autobahn_server_test.lua ws://127.0.0.1:9002 '*f'
   - lua -lluacov ./autobahn_server_test.lua ws://127.0.0.1:9002 '*t'
-  - lua -lluacov ./autobahn_server_test.lua wss://127.0.0.1:9002
-  - lua -lluacov ./autobahn_wserver_test.lua ws://127.0.0.1:9002
-  - lua -lluacov ./autobahn_wserver_test.lua wss://127.0.0.1:9002
-  - lua -lluacov ./autobahn_co_server_test.lua ws://127.0.0.1:9002
-  - lua -lluacov ./autobahn_co_server_test.lua wss://127.0.0.1:9002
+  - lua -lluacov ./autobahn_co_server_test.lua ws://127.0.0.1:9002 '*r'
 
 after_success:
   - luacov-coveralls -v

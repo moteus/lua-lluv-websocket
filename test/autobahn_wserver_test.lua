@@ -20,6 +20,7 @@ local agent     = string.format("websocket.server.lluv (%s / %s)",
   url:lower():match("^wss:") and "WSS" or "WS"
 )
 local exitCode  = -1
+local verbose   = false
 
 local config = {
   outdir = reportDir,
@@ -44,7 +45,7 @@ function wstest(args, cb)
   return uv.spawn({
     file = "wstest",
     args = args,
-    stdio = {{}, 1, 2}
+    stdio = {{}, verbose and 1 or {}, verbose and 2 or {}}
   }, function(handle, err, status, signal)
     handle:close()
     if err then error("Error spawn:" .. tostring(err)) end

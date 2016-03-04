@@ -21,6 +21,7 @@ local agent     = string.format("lluv-websocket (%s / %s)",
 )
 local exitCode  = -1
 local read_pat  = arg[2] or "*s"
+local verbose   = false
 
 local config = {
   outdir = reportDir,
@@ -55,7 +56,7 @@ function wstest(args, cb)
   return uv.spawn({
     file = "wstest",
     args = args,
-    stdio = {{}, 1, 2}
+    stdio = {{}, verbose and 1 or {}, verbose and 2 or {}}
   }, function(handle, err, status, signal)
     handle:close()
     if err then error("Error spawn:" .. tostring(err)) end
@@ -95,7 +96,9 @@ function runTest(cb)
       local cli = server:accept()
 
       currentCaseId = currentCaseId + 1
-      print("Handshake test case " .. tostring(currentCaseId))
+      if verbose then
+        print("Handshake test case " .. tostring(currentCaseId))
+      end
 
       cli:handshake(function(self, err, protocol)
         if err then
