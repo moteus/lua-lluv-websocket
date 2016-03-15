@@ -27,8 +27,11 @@ build = {
     ['lluv.websocket.bit']            = 'src/lluv/websocket/bit.lua',
     ['lluv.websocket.tools']          = 'src/lluv/websocket/tools.lua',
     ['lluv.websocket.frame']          = 'src/lluv/websocket/frame.lua',
+    ['lluv.websocket.error']          = 'src/lluv/websocket/error.lua',
+    ['lluv.websocket.split']          = 'src/lluv/websocket/split.lua',
     ['lluv.websocket.handshake']      = 'src/lluv/websocket/handshake.lua',
     ['lluv.websocket.luasocket']      = 'src/lluv/websocket/luasocket.lua',
+    ['lluv.websocket.extensions']     = 'src/lluv/websocket/extensions.lua',
     ['lluv.websocket.utf8_validator'] = 'src/lluv/websocket/utf8_validator.lua',
   }
 }

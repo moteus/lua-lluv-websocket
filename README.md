@@ -12,7 +12,7 @@ This library includes stream interface for lluv and lluv backend for [lua-websoc
  * IPv6 - done
  * Check mask flag according RFC 6455 - done
  * Validate RSV bits - needs [lua-websockets/PR #55](https://github.com/lipp/lua-websockets/pull/55) (tested)
- * Extension (e.g. compression) - not supported (for now I have no plans for this)
+ * Extension (e.g. compression) - supported (need more tests)
 
 ## [lua-websockets](https://github.com/lipp/lua-websockets) backend status
  * Async server - done (not tested)

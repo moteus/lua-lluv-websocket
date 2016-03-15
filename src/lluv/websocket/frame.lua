@@ -114,10 +114,15 @@ local decode = function(encoded)
   return decoded, fin
 end
 
-local encode = function(data,opcode,masked,fin)
-  local header = opcode or 1 -- TEXT is default opcode
+local encode = function(data, opcode, masked, fin, rsv1, rsv2, rsv3)
+  local header = bit.bor(opcode or 1, -- TEXT is default opcode
+    rsv1 and bit_6 or 0,
+    rsv2 and bit_5 or 0,
+    rsv3 and bit_4 or 0
+  )
+
   if fin == nil or fin == true then
-    header = bit.bor(header,bit_7)
+    header = bit.bor(header, bit_7)
   end
 
   local payload = 0

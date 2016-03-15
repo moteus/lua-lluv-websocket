@@ -12,14 +12,22 @@
 
 local trace -- = function(...) print(os.date("[WS ][%x %X]"), ...) end
 
-local uv        = require "lluv"
-local ut        = require "lluv.utils"
-local tools     = require "lluv.websocket.tools"
-local frame     = require "lluv.websocket.frame"
-local handshake = require "lluv.websocket.handshake"
+local uv         = require "lluv"
+local ut         = require "lluv.utils"
+local tools      = require "lluv.websocket.tools"
+local frame      = require "lluv.websocket.frame"
+local handshake  = require "lluv.websocket.handshake"
+local WSError    = require "lluv.websocket.error"
+local Extensions = require "lluv.websocket.extensions"
 
 local ok, ssl   = pcall(require, 'lluv.ssl')
 if not ok then ssl = nil end
+
+
+local WSError_handshake_faild = WSError.raise_handshake_faild
+local WSError_EOF             = WSError.raise_EOF
+local WSError_ESTATE          = WSError.raise_ESTATE
+local WSError_ENOSUP          = WSError.raise_ENOSUP
 
 local CONTINUATION = frame.CONTINUATION
 local TEXT         = frame.TEXT
@@ -48,13 +56,14 @@ local function text(msg)
   return "[   NULL   ]"
 end
 
-local function hex(msg)
+local function hex(msg, N)
+  N = N or 50
   if msg then
     return string.format("[0x%.8X]", #msg) .. 
-      string.gsub(msg:sub(1, 50), ".", function(ch)
+      string.gsub(msg:sub(1, N), ".", function(ch)
         return string.format("%.2x ", string.byte(ch))
       end) ..
-      (#msg > 50 and "..." or "")
+      (#msg > N and "..." or "")
   end
   return "[   NULL   ]"
 end
@@ -65,72 +74,6 @@ end
 
 local tconcat   = table.concat
 local tappend   = function(t, v) t[#t + 1] = v return t end
-
-local ERRORS = {
-  [-1] = "EHANDSHAKE";
-  [-2] = "EOF";
-  [-3] = "ESTATE";
-  [-4] = "ENOSUP";
-}
-
-------------------------------------------------------------------
-local WSError = ut.class() do
-
-for k, v in pairs(ERRORS) do WSError[v] = k end
-
-function WSError:__init(no, name, msg, ext, code, reason)
-  self._no     = assert(no)
-  self._name   = assert(name or ERRORS[no])
-  self._msg    = msg    or ''
-  self._ext    = ext    or ''
-  self._code   = code   or 1000
-  self._reason = reason or ''
-  return self
-end
-
-function WSError:cat()    return 'WEBSOCKET'  end
-
-function WSError:no()     return self._no     end
-
-function WSError:name()   return self._name   end
-
-function WSError:msg()    return self._msg    end
-
-function WSError:ext()    return self._ext    end
-
-function WSError:code()   return self._code and tostring(self._code) end
-
-function WSError:reason() return self._reason end
-
-function WSError:__tostring()
-  return string.format("[%s][%s] %s (%d) - %s %s(%s)",
-    self:cat(), self:name(), self:msg(), self:no(), self:ext(),
-    self:code(), self:reason()
-  )
-end
-
-function WSError:__eq(rhs)
-  return self._no == rhs._no
-end
-
-end
-------------------------------------------------------------------
-
-local function WSError_handshake_faild(msg)
-  return WSError.new(WSError.EHANDSHAKE, nil, "Handshake failed", msg)
-end
-
-local function WSError_EOF(code, reason)
-  return WSError.new(WSError.EOF, nil, "end of file", code, reason)
-end
-
-local function WSError_ESTATE(msg)
-  return WSError.new(WSError.ESTATE, nil, msg)
-end
-
-local function WSError_ENOSUP(msg)
-  return WSError.new(WSError.ENOSUP, nil, msg)
-end
 
 ------------------------------------------------------------------
 local SizedBuffer = ut.class(ut.Buffer) do
@@ -219,20 +162,45 @@ local function is_sock(s)
     true
 end
 
+local function protocol_error(self, code, msg, read_cb, shutdown)
+  self._code, self._reason = code or 1002, msg or 'Protocol error'
+  local encoded = frame.encode_close(self._code, self._reason)
+
+  if shutdown then -- no wait close response
+    self._state = 'CLOSED'
+    self:_stop_read()
+    self:write(encoded, CLOSE, function()
+      if self._sock then self._sock:shutdown() end
+    end)
+  else
+    -- we call read callback so we have to prevent second call of read callback
+    -- But we have to continue read to wait CLOSE response so we can not stop_read
+    self._read_cb = nil
+    self._state = 'CLOSE_PENDING2'
+    self:write(encoded, CLOSE)
+  end
+
+  return read_cb and read_cb(self, WSError_EOF(self._code, self._reason))
+end
+
 function WSSocket:__init(opt, s)
   if is_sock(opt) then s, opt = opt end
   opt = opt or {}
 
-  self._sock      = s or uv.tcp()
-  self._frames    = {}
-  self._opcode    = nil
-  self._origin    = nil
-  self._ready     = nil
-  self._state     = 'CLOSED' -- no connection
-  self._buffer    = nil
-  self._wait_size = nil
-  self._timeout   = opt.timeout
-  self._protocols = opt.protocols
+  self._sock       = s or uv.tcp()
+  self._frames     = {}
+  self._opcode     = nil
+  self._origin     = nil
+  self._ready      = nil
+  self._state      = 'CLOSED' -- no connection
+  self._buffer     = nil
+  self._wait_size  = nil
+  self._timeout    = opt.timeout
+  self._protocols  = opt.protocols
+  self._extensions = nil
+  self._last_rsv1  = nil
+  self._last_rsv2  = nil
+  self._last_rsv3  = nil
 
   if opt.utf8 then
     if opt.utf8 == true then
@@ -297,21 +265,35 @@ function WSSocket:connect(url, proto, cb)
 
     local ip = res[1]
 
+    if trace then
+      trace("Resolve " .. host .. " to " .. ip.address)
+      trace("Connecting to " .. ip.address .. ":" .. port)
+    end
+
     self._sock:connect(ip.address, port, function(sock, err)
       if err then return cb(self, err) end
+
+      if trace then trace("Connected to " .. ip.address .. ":" .. port) end
 
       self:_client_handshake(key, req, cb)
     end)
   end)
 
+  local extensions 
+  if self._extensions then
+    extensions = self._extensions:offer()
+  end
+
   key = tools.generate_key()
+
   req = handshake.upgrade_request{
-    key       = key,
-    host      = host,
-    port      = port,
-    protocols = {proto or ''},
-    origin    = self._origin,
-    uri       = uri
+    key        = key,
+    host       = host,
+    port       = port,
+    protocols  = {proto or ''},
+    origin     = self._origin,
+    uri        = uri,
+    extensions = extensions,
   }
 
   return self
@@ -349,34 +331,37 @@ decode_write_args = function(msg, opcode, fin, cb)
   return msg, opcode or TEXT, not not fin, cb
 end
 
+local function frame_encode(self, msg, opcode, fin, allows)
+  local rsv1, rsv2, rsv3 = false, false, false
+
+  if (opcode == BINARY or opcode == TEXT or opcode == CONTINUATION) and self._extensions then
+    msg, rsv1, rsv2, rsv3 = self._extensions:encode(msg, opcode, fin, allows)
+  end
+
+  if trace then trace("TX>", self._state, frame_name(opcode), fin, self._masked, rsv1, rsv2, rsv3, text(msg)) end
+
+  local encoded = frame.encode(msg, opcode, self._masked, fin, rsv1, rsv2, rsv3)
+
+  return encoded
+end
+
 function WSSocket:write(msg, opcode, fin, cb)
   msg, opcode, fin, cb = decode_write_args(msg, opcode, fin, cb)
 
   local encoded
   if type(msg) == "table" then
     if msg[1] then
-      if trace then trace("TX>", self._state, frame_name(opcode), 1 == #msg, self._masked, text(msg[1])) end
-
-      encoded = {
-        frame.encode(msg[1], opcode, self._masked, fin and 1 == #msg)
-      }
-
+      encoded = {frame_decode(self, msg[1], opcode, fin and 1 == #msg)}
       for i = 2, #msg do
         if #msg[i] > 0 then
-          if trace then trace("TX>", self._state, frame_name(opcode), i == #msg, self._masked, text(msg[i])) end
-
-          table.insert(encoded,
-            frame.encode(msg[i], CONTINUATION, self._masked, fin and i == #msg)
-          )
+          tappend(encoded, frame_decode(self, msg[i], CONTINUATION, fin and i == #msg))
         end
       end
     else
-      if trace then trace("TX>", self._state, frame_name(opcode), true, self._masked, text('')) end
-      encoded = frame.encode('', opcode, self._masked, fin)
+      encoded = frame_encode(self, '', opcode, fin)
     end
   else
-    if trace then trace("TX>", self._state, frame_name(opcode), true, self._masked, text(msg)) end
-    encoded = frame.encode(msg, opcode, self._masked, fin)
+    encoded = frame_encode(self, msg, opcode, fin)
   end
 
   local ok, err
@@ -447,6 +432,20 @@ function WSSocket:_client_handshake(key, req, cb)
 
     if trace then trace("WS HS DONE>", "buffer size:", self._buffer:size()) end
 
+    local extensions = handshake.decode_header(headers['sec-websocket-extensions'])
+    if extensions and #extensions then
+      if not self._extensions then
+        -- we get extension response but we do not send offer
+        return protocol_error(self, 1010, "Unsupported extensin", cb)
+      end
+
+      local ok, err = self._extensions:accept(extensins)
+      if err and not ok then
+        -- we get error while check accept options
+        return protocol_error(self, 1010, "Unsupported extensin", cb)
+      end
+    end
+
     cb(self, nil, headers)
   end)
 
@@ -498,13 +497,28 @@ function WSSocket:_server_handshake(cb)
 
     request = request .. '\r\n'
 
-    local response, protocol = handshake.accept_upgrade(request, self._protocols)
+    local response, protocol, extensions = handshake.accept_upgrade(request, self._protocols)
     if not response then
       self._state = 'FAILED'
       self._sock:shutdown()
       err = WSError_handshake_faild(request)
       return cb(self, err)
     end
+
+    if extensions and #extensions > 0 then
+      if self._extensions then
+        local resp, err = self._extensions:response(extensions)
+        if resp then
+          tappend(response,
+            'Sec-WebSocket-Extensions: ' .. handshake.encode_header(resp)
+          )
+        elseif err then
+          response = {"HTTP/1.1 401 invalid extension arguments"}
+        end
+      end
+    end
+
+    response = tconcat(tappend(response, '\r\n'), '\r\n')
 
     if trace then trace("TX>", "HANDSHAKE", text(response)) end
 
@@ -521,7 +535,6 @@ function WSSocket:_server_handshake(cb)
       cb(self, nil, protocol, headers)
     end)
     headers = handshake.http_headers(request)
-
   end)
 end
 
@@ -609,40 +622,23 @@ function WSSocket:close(code, reason, cb)
   end
 end
 
-local function protocol_error(self, code, msg, read_cb, shutdown)
-  self._code, self._reason = code or 1002, msg or 'Protocol error'
-  local encoded = frame.encode_close(self._code, self._reason)
-
-  if shutdown then -- no wait close response
-    self._state = 'CLOSED'
-    self:_stop_read()
-    self:write(encoded, CLOSE, function()
-      if self._sock then self._sock:shutdown() end
-    end)
-  else
-    -- we call read callback so we have to prevent second call of read callback
-    -- But we have to continue read to wait CLOSE response so we can not stop_read
-    self._read_cb = nil
-    self._state = 'CLOSE_PENDING2'
-    self:write(encoded, CLOSE)
-  end
-
-  return read_cb and read_cb(self, WSError_EOF(self._code, self._reason))
-end
-
 local validate_frame = function(self, cb, decoded, fin, opcode, masked, rsv1, rsv2, rsv3)
-  if rsv1 or rsv2 or rsv3 then -- Invalid frame
-    if self._state == 'WAIT_DATA' then
-      protocol_error(self, 1002, "Invalid reserved bit", cb)
-    end
-    return false
-  end
   if self._masked == masked then
     if self._state == 'WAIT_DATA' then
       protocol_error(self, 1002, "Invalid masked bit", cb)
     end
     return false
   end
+
+  if rsv1 or rsv2 or rsv3 then -- Invalid frame
+    if not self:_validate_frame(opcode, rsv1, rsv2, rsv3) then
+      if self._state == 'WAIT_DATA' then
+        protocol_error(self, 1002, "Invalid reserved bit", cb)
+      end
+      return false
+    end
+  end
+
   return true
 end
 
@@ -743,11 +739,16 @@ local on_data = function(self, mode, cb, decoded, fin, opcode, masked, rsv1, rsv
       return protocol_error(self, 1002, "Unexpected continuation frame", cb, true)
     else
       self._frames, self._opcode = (mode == '*f') or {}, opcode
+      self._last_rsv1,self._last_rsv2,self._last_rsv3 = rsv1, rsv2, rsv3
     end
   else
     if opcode ~= CONTINUATION then
       return protocol_error(self, 1002, "Unexpected data frame", cb, true)
     end
+  end
+
+  if self._extensions then
+    decoded = self._extensions:decode(decoded, opcode, fin, self._last_rsv1, self._last_rsv2, self._last_rsv3)
   end
 
   if self._validator and self._opcode == TEXT then
@@ -756,6 +757,10 @@ local on_data = function(self, mode, cb, decoded, fin, opcode, masked, rsv1, rsv
     end
   end
 
+  if fin == true then
+    self._last_rsv1,self._last_rsv2,self._last_rsv3 = nil
+  end
+  
   if mode == '*f' then
     if fin == true then
       self._frames, self._opcode = nil
@@ -862,7 +867,7 @@ end
 WSSocket._on_raw_data = on_raw_data_2
 
 -- export to be able run tests
-on_raw_data_by_pos, on_raw_data_by_chunk = on_raw_data_2, on_raw_data_1
+on_raw_data_by_pos, on_raw_data_by_chunk = on_raw_data_1, on_raw_data_2
 
 function WSSocket:_start_read(mode, cb)
   if type(mode) == 'function' then
@@ -884,6 +889,7 @@ function WSSocket:_start_read(mode, cb)
     if trace and err then trace("WS RAW RX>", self._state, cb, err) end
 
     if err then
+      local read_cb = self._read_cb
       self:_stop_read()
       self._sock:shutdown()
 
@@ -893,7 +899,8 @@ function WSSocket:_start_read(mode, cb)
         self._state = 'CLOSED'
       end
 
-      if self._read_cb == cb then cb(self, err) end
+      print(">??????????????????????", read_cb, cb )
+      if read_cb == cb then cb(self, err) end
 
       return 
     end
@@ -987,10 +994,14 @@ function WSSocket:accept()
   local cli, err = self._sock:accept()
   if not cli then return nil, err end
   if self._is_wss then cli = assert(self._ssl:server(cli)) end
-  return WSSocket.new({
+  local sock = WSSocket.new({
     protocols = self._protocols;
     utf8      = self._validator and self._validator.new();
   }, cli)
+
+  sock._extensions = self._extensions
+
+  return sock
 end
 
 function WSSocket:listen(cb)
@@ -1013,6 +1024,18 @@ end
 
 function WSSocket:getpeername()
   return self._sock:getpeername()
+end
+
+function WSSocket:register(...)
+  if not self._extensions then
+    self._extensions = Extensions.new()
+  end
+  self._extensions:reg(...)
+  return self
+end
+
+function WSSocket:_validate_frame(opcode, rsv1, rsv2, rsv3)
+  return self._extensions and self._extensions:validate_frame(opcode, rsv1, rsv2, rsv3)
 end
 
 end
@@ -1114,6 +1137,8 @@ return {
 
   CONTINUATION = CONTINUATION;
   CLOSE        = CLOSE;
+
+  Extensions   = Extensions;
 
   -- !!! NOT PUBLIC API !!! --
   __self_test            = self_test;

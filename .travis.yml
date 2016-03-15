@@ -5,6 +5,11 @@ python:
 
 sudo: false
 
+addons:
+  apt:
+    packages:
+      - zlib1g-dev
+
 matrix:
   include:
     - compiler: ": Lua51"
@@ -40,6 +45,8 @@ before_install:
   - luarocks show lluv      || luarocks install lluv     UV_DIR=$TRAVIS_BUILD_DIR/libuv
   - luarocks show lluv-ssl  || luarocks install lluv-ssl 
   - luarocks show basexx    || luarocks install basexx
+  - luarocks show lpeg      || luarocks install lpeg
+  - luarocks show lzlib     || luarocks install lzlib
   # - luarocks show lbase64   || luarocks install lbase64
   # - luarocks show luacrypto || luarocks install luacrypto
   - if [ "$LUA" == "lua 5.1" ]; then
@@ -55,10 +62,12 @@ before_script:
   - pip install --user autobahntestsuite
   - luarocks show luacov-coveralls || luarocks install luacov-coveralls
   - luarocks show lua-cjson || luarocks install lua-cjson
+  - luarocks show lunitx || luarocks install lunitx
 
 script: 
   - cd test
   - lua -lluacov test.lua
+  - lunit.sh test_extensions.lua
 
   #                         Client tests
   - wstest -m fuzzingserver &
