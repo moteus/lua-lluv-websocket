@@ -351,10 +351,10 @@ function WSSocket:write(msg, opcode, fin, cb)
   local encoded
   if type(msg) == "table" then
     if msg[1] then
-      encoded = {frame_decode(self, msg[1], opcode, fin and 1 == #msg)}
+      encoded = {frame_encode(self, msg[1], opcode, fin and 1 == #msg)}
       for i = 2, #msg do
         if #msg[i] > 0 then
-          tappend(encoded, frame_decode(self, msg[i], CONTINUATION, fin and i == #msg))
+          tappend(encoded, frame_encode(self, msg[i], CONTINUATION, fin and i == #msg))
         end
       end
     else
