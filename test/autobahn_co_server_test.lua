@@ -52,6 +52,13 @@ if read_pat == '*r' then
   -- Problem in ut8 validator which detect it too late
   --
   table.insert(config["exclude-cases"], "6.3.2")
+  ----
+  -- Remote side send TEXT CONT CONT CLOSE
+  -- we echod TEXT and while do write operation
+  -- we proceed CONT CONT (store them in buffer)
+  -- and response to `CLOSE`.
+  --
+  table.insert(config["exclude-cases"], "6.1.2")
 end
 
 function wstest(args, cb)

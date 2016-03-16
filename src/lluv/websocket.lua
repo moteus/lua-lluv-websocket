@@ -336,6 +336,7 @@ local function frame_encode(self, msg, opcode, fin, allows)
   if opcode == BINARY or opcode == TEXT or opcode == CONTINUATION then
     if self._extensions then
       msg, rsv1, rsv2, rsv3 = self._extensions:encode(msg, opcode, fin, allows)
+      if not msg then return nil, rsv1 end
     end
     if (msg == '') and (opcode == CONTINUATION) and (not fin) then
       return
