@@ -23,7 +23,6 @@ local Extensions = require "lluv.websocket.extensions"
 local ok, ssl   = pcall(require, 'lluv.ssl')
 if not ok then ssl = nil end
 
-
 local WSError_handshake_faild = WSError.raise_handshake_faild
 local WSError_EOF             = WSError.raise_EOF
 local WSError_ESTATE          = WSError.raise_ESTATE
@@ -334,8 +333,13 @@ end
 local function frame_encode(self, msg, opcode, fin, allows)
   local rsv1, rsv2, rsv3 = false, false, false
 
-  if (opcode == BINARY or opcode == TEXT or opcode == CONTINUATION) and self._extensions then
-    msg, rsv1, rsv2, rsv3 = self._extensions:encode(msg, opcode, fin, allows)
+  if opcode == BINARY or opcode == TEXT or opcode == CONTINUATION then
+    if self._extensions then
+      msg, rsv1, rsv2, rsv3 = self._extensions:encode(msg, opcode, fin, allows)
+    end
+    if (msg == '') and (opcode == CONTINUATION) and (not fin) then
+      return
+    end
   end
 
   if trace then trace("TX>", self._state, frame_name(opcode), fin, self._masked, rsv1, rsv2, rsv3, text(msg)) end
@@ -364,18 +368,21 @@ function WSSocket:write(msg, opcode, fin, cb)
     encoded = frame_encode(self, msg, opcode, fin)
   end
 
-  local ok, err
-  if not cb then ok, err = self._sock:write(encoded)
-  else ok, err = self._sock:write(encoded, self._on_write, cb) end
+  if encoded and #encoded > 0 then
+    local ok, err
+    if not cb then ok, err = self._sock:write(encoded)
+    else ok, err = self._sock:write(encoded, self._on_write, cb) end
 
-  if trace then
-    if type(encoded) == 'table' then
-      encoded = table.concat(encoded)
+    if trace then
+      if type(encoded) == 'table' then
+        encoded = table.concat(encoded)
+      end
+      trace("WS RAW TX>", self._state, cb, hex(encoded))
     end
-    trace("WS RAW TX>", self._state, cb, hex(encoded))
+
+    if not ok then return nil, err end
   end
 
-  if not ok then return nil, err end
   return self
 end
 
@@ -439,7 +446,7 @@ function WSSocket:_client_handshake(key, req, cb)
         return protocol_error(self, 1010, "Unsupported extensin", cb)
       end
 
-      local ok, err = self._extensions:accept(extensins)
+      local ok, err = self._extensions:accept(extensions)
       if err and not ok then
         -- we get error while check accept options
         return protocol_error(self, 1010, "Unsupported extensin", cb)
@@ -748,7 +755,14 @@ local on_data = function(self, mode, cb, decoded, fin, opcode, masked, rsv1, rsv
   end
 
   if self._extensions then
-    decoded = self._extensions:decode(decoded, opcode, fin, self._last_rsv1, self._last_rsv2, self._last_rsv3)
+    local err
+    decoded, err = self._extensions:decode(decoded, opcode, fin, self._last_rsv1, self._last_rsv2, self._last_rsv3)
+    if not decoded then
+      if err then
+        return protocol_error(self, 1010, "error proceed data using extensinos", cb, true)
+      end
+      return
+    end
   end
 
   if self._validator and self._opcode == TEXT then
@@ -760,7 +774,7 @@ local on_data = function(self, mode, cb, decoded, fin, opcode, masked, rsv1, rsv
   if fin == true then
     self._last_rsv1,self._last_rsv2,self._last_rsv3 = nil
   end
-  
+
   if mode == '*f' then
     if fin == true then
       self._frames, self._opcode = nil
@@ -899,7 +913,6 @@ function WSSocket:_start_read(mode, cb)
         self._state = 'CLOSED'
       end
 
-      print(">??????????????????????", read_cb, cb )
       if read_cb == cb then cb(self, err) end
 
       return 

@@ -148,11 +148,13 @@ end
 function Extensions:validate_frame(opcode, rsv1, rsv2, rsv3)
   local m1, m2, m3
 
-  for i = 1, #self._active do
-    local ext = self._active[i]
-    if (ext.rsv1 and rsv1) then m1 = true end
-    if (ext.rsv2 and rsv2) then m2 = true end
-    if (ext.rsv3 and rsv3) then m3 = true end
+  if self._active then
+    for i = 1, #self._active do
+      local ext = self._active[i]
+      if (ext.rsv1 and rsv1) then m1 = true end
+      if (ext.rsv2 and rsv2) then m2 = true end
+      if (ext.rsv3 and rsv3) then m3 = true end
+    end
   end
 
   return (m1 or not rsv1) and (m2 or not rsv2) and (m3 or not rsv3)
@@ -165,7 +167,8 @@ function Extensions:encode(msg, opcode, fin, allows)
     for i = 1, #self._active do
       local ext = self._active[i]
       if (allows ~= false) and ( (allows == true) or (allows[ext.name]) ) then
-        msg  = ext:encode(opcode, msg, fin)
+        local err msg, err  = ext:encode(opcode, msg, fin)
+        if not msg then return nil, err end
         rsv1 = rsv1 or ext.rsv1
         rsv2 = rsv2 or ext.rsv2
         rsv3 = rsv3 or ext.rsv3
@@ -181,7 +184,8 @@ function Extensions:decode(msg, opcode, fin, rsv1, rsv2, rsv3)
   for i = #self._active, 1, -1 do
     local ext = self._active[i]
     if (ext.rsv1 and rsv1) or (ext.rsv2 and rsv2) or (ext.rsv3 and rsv3) then
-      msg = ext:decode(opcode, msg, fin)
+      local err msg, err = ext:decode(opcode, msg, fin)
+      if not msg then return nil, err end
     end
   end
   return msg

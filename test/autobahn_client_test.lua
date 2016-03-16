@@ -1,6 +1,7 @@
-local uv        = require "lluv"
-local websocket = require "lluv.websocket"
-local Autobahn  = require "./autobahn"
+local uv          = require "lluv"
+local websocket   = require "lluv.websocket"
+local Autobahn    = require "./autobahn"
+websocket.deflate = require "lluv.websocket.extensions.permessage-deflate"
 
 local ctx do
   local ok, ssl = pcall(require, "lluv.ssl")
@@ -52,7 +53,10 @@ end
 function runTestCase(no, cb)
   local ws_uri = Autobahn.Server.runTestCase(URI, no, agent)
 
-  websocket.new{ssl = ctx, utf8 = true}:connect(ws_uri, "echo", function(cli, err)
+  websocket
+  .new{ssl = ctx, utf8 = true}
+  :register(websocket.deflate)
+  :connect(ws_uri, "echo", function(cli, err)
     if err then
       print("Client connect error:", err)
       return cli:close()
@@ -60,7 +64,7 @@ function runTestCase(no, cb)
 
     print("Executing test case " .. no .. "/" .. caseCount)
 
-    cli:start_read("*t", function(self, err, message, opcode)
+    cli:start_read("*f", function(self, err, message, opcode, fin)
       if err then
         if not isEOF(err) then -- some tests do not make full close handshake(e.g. 3.3)
           print("Client read error:", err)
@@ -68,8 +72,8 @@ function runTestCase(no, cb)
         return cli:close(cb)
       end
 
-      if opcode == websocket.TEXT or opcode == websocket.BINARY then
-        cli:write(message, opcode)
+      if opcode == websocket.TEXT or opcode == websocket.BINARY or opcode == websocket.CONTINUATION then
+        cli:write(message, opcode, fin)
       end
 
     end)
@@ -129,4 +133,4 @@ end
 
 runAll()
 
--- runtTestCase(10, print) uv.run(debug.traceback)
+-- runTestCase(1, print) uv.run(debug.traceback)

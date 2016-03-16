@@ -33,5 +33,7 @@ build = {
     ['lluv.websocket.luasocket']      = 'src/lluv/websocket/luasocket.lua',
     ['lluv.websocket.extensions']     = 'src/lluv/websocket/extensions.lua',
     ['lluv.websocket.utf8_validator'] = 'src/lluv/websocket/utf8_validator.lua',
+
+    ['lluv.websocket.extensions.permessage-deflate'] = 'src/lluv/websocket/extensions/permessage-deflate.lua',
   }
 }

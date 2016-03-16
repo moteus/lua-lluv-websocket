@@ -7,6 +7,7 @@ local equal, IT = utils.is_equal, utils.IT
 
 local Extensions = require "lluv.websocket.extensions"
 local handshake  = require "lluv.websocket.handshake"
+local ut         = require "lluv.utils"
 
 local decode_header_lpeg   = handshake._decode_header_lpeg
 local decode_header_native = handshake._decode_header_native 
@@ -26,6 +27,10 @@ local function E(t)
   if type(t.offer) == 'table' then
     local offer = t.offer
     t.offer = function() return offer end
+  elseif t.offer == false then
+    t.offer = function() return end
+  elseif t.offer == nil or t.offer == true then
+    t.offer = function() return {} end
   end
 
   if type(t.accept) == 'boolean' then
@@ -171,6 +176,7 @@ end
 
 ------------------------------------------------------------------
 local _ENV = TEST_CASE'Extensions client' if ENABLE then
+local it = IT(_ENV or _M)
 
 local ext
 
@@ -340,6 +346,72 @@ function test_accept_multi_ext_with_same_rsv()
   local _, err = assert_nil(ext:accept(response))
   assert(err)
 end
+
+it('buffered encode', function()
+
+  local function ret(self)
+    return self.buffer:prepend(self.prefix):read_all()
+  end
+
+  local function reset(self)
+    self.buffer:reset()
+    self.called     = false
+    self.size       = 0
+    self.do_proceed = nil
+    self.do_error   = nil
+  end
+
+  local encode = function(self, opcode, msg, fin)
+    -- pp(self.prefix, msg, fin)
+    self.called = true
+    self.size   = (self.size or 0) + #msg
+    self.buffer:append(msg)
+    if fin then return ret(self) end
+    if self.do_proceed then return ret(self) end
+    if self.do_error   then return nil, self.do_error end
+  end;
+
+  local decode = function(self, opcode, msg, fin)
+    assert_equal(self.prefix, msg:sub(1, #self.prefix))
+    return msg:sub(#self.prefix + 1)
+  end;
+
+  local foo = E{'permessage-foo', true, prefix = "permessage-foo/",
+    buffer = ut.Buffer.new(), encode = encode, decode = decode, reset = reset
+  }
+
+  local bar = E{'permessage-bar', false, true, prefix = "permessage-bar/",
+    buffer = ut.Buffer.new(), encode = encode, decode = decode, reset = reset
+  }
+
+  local function reset()
+    foo:reset()
+    bar:reset()
+  end
+
+  assert(ext:reg(foo))
+
+  assert(ext:reg(bar))
+
+  local offer = assert_table(ext:offer())
+
+  assert(ext:accept({{'permessage-bar'}, {'permessage-foo'}}))
+
+  assert_equal('permessage-foo/permessage-bar/hello', ext:encode('hello', TEXT, true))
+  assert_true(foo.called)
+  assert_true(bar.called)
+
+  reset()
+
+  local _, err = assert_nil(ext:encode('hello', TEXT, false))
+  assert_nil(err)
+  assert_false(foo.called)
+  assert_true(bar.called)
+
+  assert_equal('permessage-foo/permessage-bar/hello', ext:encode('', CONTINUATION, true))
+
+  reset()
+end)
 
 end
 ------------------------------------------------------------------
