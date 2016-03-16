@@ -451,7 +451,7 @@ function WSSocket:_client_handshake(key, req, cb)
         -- we get error while check accept options
         return protocol_error(self, 1010, "Unsupported extensin", cb)
       end
-    end
+    else self._extensions = nil end
 
     cb(self, nil, headers)
   end)
@@ -515,11 +515,13 @@ function WSSocket:_server_handshake(cb)
     if extensions and #extensions > 0 then
       if self._extensions then
         local resp, err = self._extensions:response(extensions)
-        if resp then
+        if resp and #resp > 0 then
           tappend(response,
             'Sec-WebSocket-Extensions: ' .. handshake.encode_header(resp)
           )
-        elseif err then
+        else self._extensions = nil end
+
+        if (not resp) and err then
           response = {"HTTP/1.1 401 invalid extension arguments"}
         end
       end

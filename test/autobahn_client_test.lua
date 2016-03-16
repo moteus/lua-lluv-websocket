@@ -64,7 +64,7 @@ function runTestCase(no, cb)
 
     print("Executing test case " .. no .. "/" .. caseCount)
 
-    cli:start_read("*f", function(self, err, message, opcode, fin)
+    cli:start_read("*t", function(self, err, message, opcode, fin)
       if err then
         if not isEOF(err) then -- some tests do not make full close handshake(e.g. 3.3)
           print("Client read error:", err)
