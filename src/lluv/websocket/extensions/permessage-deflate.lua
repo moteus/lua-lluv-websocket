@@ -355,6 +355,11 @@ end
 ------------------------------------------------------------------
 local Deflate = ut.class() do
 
+Deflate.name = 'permessage-deflate';
+Deflate.rsv1 = true;
+Deflate.rsv2 = false;
+Deflate.rsv3 = false;
+
 local known_params = {
   server_no_context_takeover = true;
   client_no_context_takeover = true;
@@ -403,9 +408,11 @@ local function valid_params(params, server)
 end
 
 function Deflate:__init(options)
-  local ok, err = valid_params(options, false)
-  if not ok then return nil, err end
-  
+  if options then
+    local ok, err = valid_params(options, false)
+    if not ok then return nil, err end
+  end
+
   self._options = {
     level           = options and options.level        or z.DEFAULT_COMPRESSION;
     memLevel        = options and options.memLevel     or z.DEFAULT_MEMLEVEL;
@@ -629,10 +636,10 @@ end
 ------------------------------------------------------------------
 
 local PermessageDeflate = {
-  name   = 'permessage-deflate';
-  rsv1   = true;
-  rsv2   = false;
-  rsv3   = false;
+  name   = Deflate.name;
+  rsv1   = Deflate.rsv1;
+  rsv2   = Deflate.rsv2;
+  rsv3   = Deflate.rsv3;
   client = Deflate.new;
   server = Deflate.new;
 }
