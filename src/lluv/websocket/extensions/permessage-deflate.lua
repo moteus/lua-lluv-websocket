@@ -305,12 +305,55 @@ end
 ------------------------------------------------------------------
 
 ------------------------------------------------------------------
-local Deflate = ut.class() do
+local DError = ut.class() do
 
-Deflate.name = 'permessage-deflate'
-Deflate.rsv1 = true
-Deflate.rsv2 = false
-Deflate.rsv3 = false
+local ERRORS = {
+  [-2] = "EPARAM";
+  [-3] = "DATA_ERROR";
+  [-4] = "MEM_ERROR";
+  [-5] = "BUF_ERROR";
+  [-6] = "VERSION_ERROR";
+}
+
+for k, v in pairs(ERRORS) do DError[v] = k end
+
+function DError:__init(no, name, msg, ext, code, reason)
+  self._no     = assert(no)
+  self._name   = assert(name or ERRORS[no])
+  self._msg    = msg    or ''
+  self._ext    = ext    or ''
+  return self
+end
+
+function DError:cat()    return 'PMEC-DEFLATE' end
+
+function DError:no()     return self._no       end
+
+function DError:name()   return self._name     end
+
+function DError:msg()    return self._msg      end
+
+function DError:ext()    return self._ext      end
+
+function DError:__tostring()
+  local fmt 
+  if self._ext and #self._ext > 0 then
+    fmt = "[%s][%s] %s (%d) - %s"
+  else
+    fmt = "[%s][%s] %s (%d)"
+  end
+  return string.format(fmt, self:cat(), self:name(), self:msg(), self:no(), self:ext())
+end
+
+function DError:__eq(rhs)
+  return self._no == rhs._no
+end
+
+end
+------------------------------------------------------------------
+
+------------------------------------------------------------------
+local Deflate = ut.class() do
 
 local known_params = {
   server_no_context_takeover = true;
@@ -319,41 +362,50 @@ local known_params = {
   server_max_window_bits     = true;
 }
 
-function Deflate.client(options)
-  return Deflate.new(options)
-end
-
-function Deflate.server(options, offer)
-  return Deflate.new(options)
-end
-
 local function valid_window(bits)
   return bits and bits >= z.MINIMUM_WINDOWBITS and bits <= z.MAXIMUM_WINDOWBITS
 end
 
-local function valid_params(params)
+local function valid_params(params, server)
   for k, v in pairs(params) do
-    if not known_params[k] then return nil, k end
+    if not known_params[k] then
+      if type(k) == 'number' then require "pp"(params) end
+      return nil, DError.new(DError.EPARAM, nil, 'Unknown parameter', k)
+    end
+
     -- does not support multiple values for any parameter
-    if type(v) == 'table' then return nil, k end
+    if type(v) == 'table' then
+      return nil, DError.new(DError.EPARAM, nil, 'Invalid value for parameter', k)
+    end
   end
 
   if params.server_no_context_takeover and params.server_no_context_takeover ~= true then
-    return nil, 'server_no_context_takeover'
+    return nil, DError.new(DError.EPARAM, nil, 'Invalid value for parameter', 'server_no_context_takeover')
   end
 
   if params.client_no_context_takeover and params.client_no_context_takeover ~= true then
-    return nil, 'client_no_context_takeover'
+    return nil, DError.new(DError.EPARAM, nil, 'Invalid value for parameter', 'client_no_context_takeover')
   end
 
-  if params.server_max_window_bits and not valid_window(tonumber(params.server_max_window_bits)) then
-    return nil, 'server_max_window_bits'
+  if server or params.server_max_window_bits ~= true then
+    if params.server_max_window_bits and not valid_window(tonumber(params.server_max_window_bits)) then
+      return nil, DError.new(DError.EPARAM, nil, 'Invalid value for parameter', 'server_max_window_bits')
+    end
+  end
+
+  if server or params.client_max_window_bits ~= true then
+    if params.client_max_window_bits and not valid_window(tonumber(params.client_max_window_bits)) then
+      return nil, DError.new(DError.EPARAM, nil, 'Invalid value for parameter', 'client_max_window_bits')
+    end
   end
 
   return true
 end
 
 function Deflate:__init(options)
+  local ok, err = valid_params(options, false)
+  if not ok then return nil, err end
+  
   self._options = {
     level           = options and options.level        or z.DEFAULT_COMPRESSION;
     memLevel        = options and options.memLevel     or z.DEFAULT_MEMLEVEL;
@@ -364,8 +416,6 @@ function Deflate:__init(options)
     noServerContext = options and options.server_no_context_takeover; 
   }
 
-  assert((self._options.clientWindow == nil) or valid_window(self._options.clientWindow))
-  assert((self._options.serverWindow == nil) or valid_window(self._options.serverWindow))
   return self
 end
 
@@ -394,7 +444,7 @@ function Deflate:offer()
 end
 
 function Deflate:accept(params)
-  local ok, param = valid_params(params)
+  local ok, param = valid_params(params, true)
   if not ok then return nil, param end
 
   params.client_max_window_bits = tonumber(params.client_max_window_bits)
@@ -402,29 +452,38 @@ function Deflate:accept(params)
 
   -- server accept invalid client_max_window_bits 
   if self._options.clientWindow and params.client_max_window_bits then
-    if params.client_max_window_bits > self._options.clientWindow then
-      return nil, string.format('offer client_max_window_bits: %d but server respnse: %d', 
-        self._options.clientWindow, params.client_max_window_bits)
+    if self._options.clientWindow ~= true then
+      if params.client_max_window_bits > self._options.clientWindow then
+        local msg = string.format('offer client_max_window_bits: %d but server respnse: %d', 
+          self._options.clientWindow, params.client_max_window_bits)
+        return nil, DError.new(DError.EPARAM, nil, msg, 'client_max_window_bits')
+      end
     end
   end
 
   -- we ask without context but server ignore this
   if self._options.noServerContext and not params.server_no_context_takeover then
-    return nil, 'offer server_no_context_takeover but server does not accept it'
+    local msg = 'offer server_no_context_takeover but server does not accept it'
+    return nil, DError.new(DError.EPARAM, nil, msg, 'server_no_context_takeover')
   end
 
-  if self._options.serverWindow then
+  if self._options.serverWindow and self._options.serverWindow ~= true then
     if self._options.serverWindow ~= z.DEFAULT_WINDOWBITS and not params.server_max_window_bits then
-      return nil, string.format('offer server_max_window_bits: %d but server does not accept it', 
+      local msg = string.format('offer server_max_window_bits: %d but server does not accept it',
         self._options.serverWindow, params.server_max_window_bits)
+      return nil, DError.new(DError.EPARAM, nil, msg, 'server_max_window_bits')
     end
-    if params.server_max_window_bits > self._options.serverWindow then
-      return nil, string.format('offer server_max_window_bits: %d but server respnse: %d',
-        self._options.serverWindow, params.server_max_window_bits)
+
+    if self._options.serverWindow ~= z.DEFAULT_WINDOWBITS or params.server_max_window_bits then
+      if params.server_max_window_bits > self._options.serverWindow then
+        local msg = string.format('offer server_max_window_bits: %d but server respnse: %d',
+          self._options.serverWindow, params.server_max_window_bits)
+        return nil, DError.new(DError.EPARAM, nil, msg, 'server_max_window_bits')
+      end
     end
   end
 
-  self._options.deflateNoContext = self._options.noServerContext or params.client_no_context_takeover
+  self._options.deflateNoContext = self._options.noClientContext or params.client_no_context_takeover
   self._options.deflateWindow    = self._options.clientWindow or z.DEFAULT_WINDOWBITS
   if params.client_max_window_bits and params.client_max_window_bits < self._options.deflateWindow then
     self._options.deflateWindow = params.client_max_window_bits
@@ -438,11 +497,10 @@ end
 
 function Deflate:response(params)
   params = params[1] and params or {params}
-  local i, param = 1, params[1]
-  while param do repeat
-    i, param = i+1, params[i]
+  for i = 1, #params do repeat
+    local param = params[i]
 
-    local ok, err = valid_params(param)
+    local ok, err = valid_params(param, false)
     if not ok then return nil, err end
 
     local client_max_window_bits = tonumber(param.client_max_window_bits)
@@ -570,4 +628,13 @@ end
 end
 ------------------------------------------------------------------
 
-return Deflate
+local PermessageDeflate = {
+  name   = 'permessage-deflate';
+  rsv1   = true;
+  rsv2   = false;
+  rsv3   = false;
+  client = Deflate.new;
+  server = Deflate.new;
+}
+
+return PermessageDeflate

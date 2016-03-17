@@ -68,6 +68,7 @@ script:
   - cd test
   - lua -lluacov test.lua
   - lunit.sh test_extensions.lua
+  - lunit.sh test_deflate.lua
 
   #                         Client tests
   - wstest -m fuzzingserver &
