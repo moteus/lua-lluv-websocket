@@ -61,7 +61,6 @@ function Extensions:accept(params)
 
   local active, offered = {}, self._offered
   self._offered = nil
-  
 
   local rsv1, rsv2, rsv3
 
