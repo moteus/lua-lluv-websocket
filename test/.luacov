@@ -12,6 +12,7 @@ return {
   };
 
   exclude = {
+    "/lluv/websocket/split$",
   };
 
   coveralls = {
