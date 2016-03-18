@@ -5,6 +5,50 @@ local tappend   = function(t, v) t[#t + 1] = v return t end
 local CONTINUATION  = 0
 
 ------------------------------------------------------------------
+local Error = ut.class() do
+
+local ERRORS = {
+  [-1] = "EINVAL";
+}
+
+for k, v in pairs(ERRORS) do Error[v] = k end
+
+function Error:__init(no, name, msg, ext, code, reason)
+  self._no     = assert(no)
+  self._name   = assert(name or ERRORS[no])
+  self._msg    = msg    or ''
+  self._ext    = ext    or ''
+  return self
+end
+
+function Error:cat()    return 'WSEXT'    end
+
+function Error:no()     return self._no   end
+
+function Error:name()   return self._name end
+
+function Error:msg()    return self._msg  end
+
+function Error:ext()    return self._ext  end
+
+function Error:__tostring()
+  local fmt 
+  if self._ext and #self._ext > 0 then
+    fmt = "[%s][%s] %s (%d) - %s"
+  else
+    fmt = "[%s][%s] %s (%d)"
+  end
+  return string.format(fmt, self:cat(), self:name(), self:msg(), self:no(), self:ext())
+end
+
+function Error:__eq(rhs)
+  return self._no == rhs._no
+end
+
+end
+------------------------------------------------------------------
+
+------------------------------------------------------------------
 local Extensions = ut.class() do
 
 function Extensions:__init()
@@ -69,17 +113,15 @@ function Extensions:accept(params)
     local ext = offered[name]
 
     if not ext then
-      return nil, 'server response not offered extensin: ' .. name
+      return nil, Error.new(Error.EINVAL, nil, 'not offered extensin', name)
     end
 
     if (rsv1 and ext.rsv1) or (rsv2 and ext.rsv2) or (rsv2 and ext.rsv2) then
-      return nil, 'server response more then one extensin with same rsv bit: ' .. name
+      return nil, Error.new(Error.EINVAL, nil, 'more then one extensin with same rsv bit', name)
     end
 
     local ok, err = ext:accept(options)
-    if not ok then
-      return nil, err
-    end
+    if not ok then return nil, err end
 
     offered[name] = nil
     tappend(active, ext)
@@ -191,18 +233,22 @@ function Extensions:decode(msg, opcode, fin, rsv1, rsv2, rsv3)
 end
 
 function Extensions:accepted(name)
+  if not self._active then return end
+
   if name then
     for i = 1, #self._active do
       local ext = self._active[i]
-      if ext.name == name then return name end
+      if ext.name == name then return name, i end
     end
     return
   end
+
   local res = {}
   for i = 1, #self._active do
     local ext = self._active[i]
     tappend(res, ext.name)
   end
+  return res
 end
 
 end
