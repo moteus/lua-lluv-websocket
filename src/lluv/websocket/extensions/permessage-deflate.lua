@@ -325,7 +325,7 @@ function DError:__init(no, name, msg, ext, code, reason)
   return self
 end
 
-function DError:cat()    return 'PMEC-DEFLATE' end
+function DError:cat()    return 'PMCE-DEFLATE' end
 
 function DError:no()     return self._no       end
 

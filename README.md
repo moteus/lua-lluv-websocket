@@ -11,8 +11,9 @@ This library includes stream interface for lluv and lluv backend for [lua-websoc
  * UTF8 validate - done (except some fast fail cases)
  * IPv6 - done
  * Check mask flag according RFC 6455 - done
- * Validate RSV bits - needs [lua-websockets/PR #55](https://github.com/lipp/lua-websockets/pull/55) (tested)
- * Extension (e.g. compression) - supported (need more tests)
+ * Validate RSV bits - done
+ * Extensions general (Section 9 of [RFC 6455](https://tools.ietf.org/html/rfc6455#section-9) and [RFC 7692](https://tools.ietf.org/html/rfc7692) ) - supported (need more tests)
+ * Extensions PMCE(Section 7 of [RFC 7692](https://tools.ietf.org/html/rfc7692#section-7)) (permessage-deflate) - supported (need more tests)
 
 ## [lua-websockets](https://github.com/lipp/lua-websockets) backend status
  * Async server - done (not tested)
