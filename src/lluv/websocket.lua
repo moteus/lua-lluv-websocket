@@ -161,7 +161,7 @@ local function is_sock(s)
     true
 end
 
-local function protocol_error(self, code, msg, read_cb, shutdown)
+local function protocol_error(self, code, msg, read_cb, shutdown, read_err)
   self._code, self._reason = code or 1002, msg or 'Protocol error'
   local encoded = frame.encode_close(self._code, self._reason)
 
@@ -179,7 +179,7 @@ local function protocol_error(self, code, msg, read_cb, shutdown)
     self:write(encoded, CLOSE)
   end
 
-  return read_cb and read_cb(self, WSError_EOF(self._code, self._reason))
+  return read_cb and read_cb(self, read_err or WSError_EOF(self._code, self._reason))
 end
 
 function WSSocket:__init(opt, s)
@@ -336,8 +336,12 @@ local function frame_encode(self, msg, opcode, fin, allows)
   if opcode == BINARY or opcode == TEXT or opcode == CONTINUATION then
     if self._extensions then
       msg, rsv1, rsv2, rsv3 = self._extensions:encode(msg, opcode, fin, allows)
-      if not msg then return nil, rsv1 end
+      if not msg then
+        if rsv1 then if trace then trace("ENCODE>", rsv1) end end
+        return
+      end
     end
+
     if (msg == '') and (opcode == CONTINUATION) and (not fin) then
       return
     end
@@ -444,13 +448,13 @@ function WSSocket:_client_handshake(key, req, cb)
     if extensions and #extensions then
       if not self._extensions then
         -- we get extension response but we do not send offer
-        return protocol_error(self, 1010, "Unsupported extensin", cb)
+        return protocol_error(self, 1010, "Unsupported extension", cb)
       end
 
       local ok, err = self._extensions:accept(extensions)
       if err and not ok then
         -- we get error while check accept options
-        return protocol_error(self, 1010, "Unsupported extensin", cb)
+        return protocol_error(self, 1010, "Unsupported extension", cb, false, err)
       end
     else self._extensions = nil end
 
@@ -513,6 +517,7 @@ function WSSocket:_server_handshake(cb)
       return cb(self, err)
     end
 
+    local response_error
     if extensions and #extensions > 0 then
       if self._extensions then
         local resp, err = self._extensions:response(extensions)
@@ -523,7 +528,8 @@ function WSSocket:_server_handshake(cb)
         else self._extensions = nil end
 
         if (not resp) and err then
-          response = {"HTTP/1.1 401 invalid extension arguments"}
+          response_error = err;
+          response = {"HTTP/1.1 400 " .. err:msg()}
         end
       end
     end
@@ -534,10 +540,10 @@ function WSSocket:_server_handshake(cb)
 
     local headers
     sock:write(response, function(sock, err)
-      if err then
+      if err or response_error then
         self._state = 'FAILED'
         self._sock:stop_read():shutdown()
-        return cb(self, err)
+        return cb(self, err or response_error)
       end
 
       self:ready(false, buffer)
@@ -762,6 +768,7 @@ local on_data = function(self, mode, cb, decoded, fin, opcode, masked, rsv1, rsv
     decoded, err = self._extensions:decode(decoded, opcode, fin, self._last_rsv1, self._last_rsv2, self._last_rsv3)
     if not decoded then
       if err then
+        if trace then trace("DECODE>", err) end
         return protocol_error(self, 1010, "error proceed data using extensinos", cb, true)
       end
       return

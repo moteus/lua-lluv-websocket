@@ -374,33 +374,40 @@ end
 local function valid_params(params, server)
   for k, v in pairs(params) do
     if not known_params[k] then
-      if type(k) == 'number' then require "pp"(params) end
-      return nil, DError.new(DError.EPARAM, nil, 'Unknown parameter', k)
+      local msg = "illegal extension parameter '" .. tostring(k) .. "' for extension 'permessage-deflate'"
+      return nil, DError.new(DError.EPARAM, nil, msg, tostring(k))
     end
 
     -- does not support multiple values for any parameter
     if type(v) == 'table' then
-      return nil, DError.new(DError.EPARAM, nil, 'Invalid value for parameter', k)
+      local msg = "multiple occurrence of extension parameter '" .. k .. "' for extension 'permessage-deflate'"
+      return nil, DError.new(DError.EPARAM, nil, msg, k)
     end
   end
 
+  local fmt = "illegal extension parameter value '%s' for parameter '%s' of extension 'permessage-deflate'"
+  
   if params.server_no_context_takeover and params.server_no_context_takeover ~= true then
-    return nil, DError.new(DError.EPARAM, nil, 'Invalid value for parameter', 'server_no_context_takeover')
+    local msg = string.format(fmt, tostring(params.server_no_context_takeover), 'server_no_context_takeover')
+    return nil, DError.new(DError.EPARAM, nil, msg, 'server_no_context_takeover')
   end
 
   if params.client_no_context_takeover and params.client_no_context_takeover ~= true then
-    return nil, DError.new(DError.EPARAM, nil, 'Invalid value for parameter', 'client_no_context_takeover')
+    local msg = string.format(fmt, tostring(params.client_no_context_takeover), 'client_no_context_takeover')
+    return nil, DError.new(DError.EPARAM, nil, msg, 'client_no_context_takeover')
   end
 
   if server or params.server_max_window_bits ~= true then
     if params.server_max_window_bits and not valid_window(tonumber(params.server_max_window_bits)) then
-      return nil, DError.new(DError.EPARAM, nil, 'Invalid value for parameter', 'server_max_window_bits')
+      local msg = string.format(fmt, tostring(params.server_max_window_bits), 'server_max_window_bits')
+      return nil, DError.new(DError.EPARAM, nil, msg, 'server_max_window_bits')
     end
   end
 
   if server or params.client_max_window_bits ~= true then
     if params.client_max_window_bits and not valid_window(tonumber(params.client_max_window_bits)) then
-      return nil, DError.new(DError.EPARAM, nil, 'Invalid value for parameter', 'client_max_window_bits')
+      local msg = string.format(fmt, tostring(params.client_max_window_bits), 'client_max_window_bits')
+      return nil, DError.new(DError.EPARAM, nil, msg, 'client_max_window_bits')
     end
   end
 
