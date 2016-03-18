@@ -49,6 +49,8 @@ it('should fail accept because unknown options', function()
 
   local _, err = assert_nil(ext:accept{foo=true})
   assert_not_nil(err)
+  assert_match("%[PMEC%-DEFLATE%]", tostring(err))
+  assert_match("%[EPARAM%]", tostring(err))
 end)
 
 it('should fail accept with invalid server_max_window_bits', function()

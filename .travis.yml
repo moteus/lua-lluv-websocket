@@ -69,10 +69,10 @@ script:
   - lunit.sh test_extensions.lua
   
   # test deflate with lzlib
-  - luarocks install lzlib    && lunit.sh test_deflate.lua
+  - luarocks install lzlib && lunit.sh test_deflate.lua
 
   # test deflate with lua-zlib
-  - luarocks install lua-zlib && lunit.sh test_deflate.lua
+  - luarocks remove lzlib && luarocks install lua-zlib && lunit.sh test_deflate.lua
 
   #                         Client tests
   # - wstest -m fuzzingserver &
