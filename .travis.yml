@@ -46,7 +46,6 @@ before_install:
   - luarocks show lluv-ssl  || luarocks install lluv-ssl 
   - luarocks show basexx    || luarocks install basexx
   - luarocks show lpeg      || luarocks install lpeg
-  - luarocks show lzlib     || luarocks install lzlib
   # - luarocks show lbase64   || luarocks install lbase64
   # - luarocks show luacrypto || luarocks install luacrypto
   - if [ "$LUA" == "lua 5.1" ]; then
@@ -59,7 +58,7 @@ install:
   - luarocks make rockspecs/lua-websockets-lluv-scm-0.rockspec --deps-mode=none
 
 before_script:
-  - pip install --user autobahntestsuite
+  # - pip install --user autobahntestsuite
   - luarocks show luacov-coveralls || luarocks install luacov-coveralls
   - luarocks show lua-cjson || luarocks install lua-cjson
   - luarocks show lunitx || luarocks install lunitx
@@ -68,39 +67,44 @@ script:
   - cd test
   - lua -lluacov test.lua
   - lunit.sh test_extensions.lua
-  - lunit.sh test_deflate.lua
+  
+  # test deflate with lzlib
+  - luarocks install lzlib    && lunit.sh test_deflate.lua
+
+  # test deflate with lua-zlib
+  - luarocks install lua-zlib && lunit.sh test_deflate.lua
 
   #                         Client tests
-  - wstest -m fuzzingserver &
-  - sleep 10
-  - lua -lluacov ./autobahn_client_test.lua ws://127.0.0.1:9001
-  - lua -lluacov ./autobahn_wclient_test.lua ws://127.0.0.1:9001
-  - lua -lluacov ./autobahn_co_client_test.lua ws://127.0.0.1:9001
-  - killall wstest
+  # - wstest -m fuzzingserver &
+  # - sleep 10
+  # - lua -lluacov ./autobahn_client_test.lua ws://127.0.0.1:9001
+  # - lua -lluacov ./autobahn_wclient_test.lua ws://127.0.0.1:9001
+  # - lua -lluacov ./autobahn_co_client_test.lua ws://127.0.0.1:9001
+  # - killall wstest
 
   #                         Client tests (WSS)
-  - wstest -m fuzzingserver -s fuzzingserver_wss.json &
-  - sleep 10
-  - lua -lluacov ./autobahn_client_test.lua wss://127.0.0.1:9001
-  - lua -lluacov ./autobahn_wclient_test.lua wss://127.0.0.1:9001
-  - lua -lluacov ./autobahn_co_client_test.lua wss://127.0.0.1:9001
-  - killall wstest
+  # - wstest -m fuzzingserver -s fuzzingserver_wss.json &
+  # - sleep 10
+  # - lua -lluacov ./autobahn_client_test.lua wss://127.0.0.1:9001
+  # - lua -lluacov ./autobahn_wclient_test.lua wss://127.0.0.1:9001
+  # - lua -lluacov ./autobahn_co_client_test.lua wss://127.0.0.1:9001
+  # - killall wstest
 
   #                         Server tests
-  - lua -lluacov ./autobahn_server_test.lua ws://127.0.0.1:9002
-  - lua -lluacov ./autobahn_wserver_test.lua ws://127.0.0.1:9002
-  - lua -lluacov ./autobahn_co_server_test.lua ws://127.0.0.1:9002
+  # - lua -lluacov ./autobahn_server_test.lua ws://127.0.0.1:9002
+  # - lua -lluacov ./autobahn_wserver_test.lua ws://127.0.0.1:9002
+  # - lua -lluacov ./autobahn_co_server_test.lua ws://127.0.0.1:9002
 
   #                         Server tests (WSS)
-  - lua -lluacov ./autobahn_server_test.lua wss://127.0.0.1:9002
-  - lua -lluacov ./autobahn_wserver_test.lua wss://127.0.0.1:9002
-  - lua -lluacov ./autobahn_co_server_test.lua wss://127.0.0.1:9002
+  # - lua -lluacov ./autobahn_server_test.lua wss://127.0.0.1:9002
+  # - lua -lluacov ./autobahn_wserver_test.lua wss://127.0.0.1:9002
+  # - lua -lluacov ./autobahn_co_server_test.lua wss://127.0.0.1:9002
 
   #                         Read mode tests
-  - lua -lluacov ./autobahn_server_test.lua ws://127.0.0.1:9002 '*f'
-  - lua -lluacov ./autobahn_server_test.lua ws://127.0.0.1:9002 '*t'
-  - lua -lluacov ./autobahn_server_test.lua ws://127.0.0.1:9002 '*s' 'chunk'
-  - lua -lluacov ./autobahn_co_server_test.lua ws://127.0.0.1:9002 '*r'
+  # - lua -lluacov ./autobahn_server_test.lua ws://127.0.0.1:9002 '*f'
+  # - lua -lluacov ./autobahn_server_test.lua ws://127.0.0.1:9002 '*t'
+  # - lua -lluacov ./autobahn_server_test.lua ws://127.0.0.1:9002 '*s' 'chunk'
+  # - lua -lluacov ./autobahn_co_server_test.lua ws://127.0.0.1:9002 '*r'
 
 after_success:
   - luacov-coveralls -v

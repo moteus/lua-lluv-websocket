@@ -4,12 +4,12 @@ local utils     = require "utils"
 local TEST_CASE = require "lunit".TEST_CASE
 local equal, IT = utils.is_equal, utils.IT
 
-local table   = table
-
 local Deflate = require "lluv.websocket.extensions.permessage-deflate"
 local ut      = require "lluv.utils"
 
 local TEXT = 1
+
+local tostring, table = tostring, table
 
 local function hex2bin(str)
   local s = ''
@@ -86,7 +86,7 @@ it('should fail accept with invalid server_no_context_takeover', function()
   local offer = assert_table(ext:offer())
 
   local _, err = assert_nil(ext:accept{
-    client_no_context_takeover = 1;
+    server_no_context_takeover = 1;
   })
   assert_not_nil(err)
 end)
@@ -299,7 +299,15 @@ end)
 it('should fail resopnse with invalid server_no_context_takeover', function()
   local ext = assert(Deflate.server{})
   local _, err = assert_nil(ext:response{
-    client_no_context_takeover = 1;
+    server_no_context_takeover = 1;
+  })
+  assert_not_nil(err)
+end)
+
+it('should fail resopnse with multiple values of server_max_window_bits', function()
+  local ext = assert(Deflate.server{})
+  local _, err = assert_nil(ext:response{
+    server_max_window_bits = {8, 15};
   })
   assert_not_nil(err)
 end)
@@ -639,6 +647,16 @@ it('should encode by chunks', function()
 
     assert_equal(table.concat(AutoBahnDecoded), table.concat(decoded))
   end
+end)
+
+it('should fail decode invalid stream', function()
+  local encoded = "this is not encoded text"
+  local server = assert(Deflate.server())
+  assert_table(server:response{})
+  local _, err = assert_nil(server:decode(TEXT, encoded, true))
+  assert_not_nil(err)
+  assert_match('%[ZLIB%]',       tostring(err))
+  assert_match('%[DATA_ERROR%]', tostring(err))
 end)
 
 end
