@@ -63,9 +63,8 @@ local upgrade_request = function(req)
     lines[2] = format('Host: %s:%d',req.host,req.port)
   end
 
-  local extensions = encode_header(req.extensions)
-  if extensions and #extensions > 0 then
-    lines[#lines + 1] = 'Sec-WebSocket-Extensions: ' .. extensions
+  if req.extensions and #req.extensions > 0 then
+    lines[#lines + 1] = 'Sec-WebSocket-Extensions: ' .. req.extensions
   end
 
   lines[#lines + 1] = '\r\n'
@@ -99,7 +98,7 @@ local accept_upgrade = function(request, protocols)
 
   local accept_key = sec_websocket_accept(headers['sec-websocket-key'])
   local connection = headers['connection']
-  local extensions = decode_header(headers['sec-websocket-extensions'])
+  local extensions = headers['sec-websocket-extensions']
 
   local lines = {
     'HTTP/1.1 101 Switching Protocols',
@@ -235,14 +234,16 @@ decode_header = decode_header_lpeg or decode_header_native
 
 local function encode_header_options(name, options)
   local str = name
-  for k, v in pairs(options) do
-    if v == true then str = str .. '; ' .. k
-    elseif type(v) == 'table' then
-      for _, v in ipairs(v) do
-        if v == true then str = str .. '; ' .. k
-        else str = str .. '; ' .. k .. '=' .. enqute(tostring(v)) end
-      end
-    else str = str .. '; ' .. k .. '=' .. enqute(tostring(v)) end
+  if options then
+    for k, v in pairs(options) do
+      if v == true then str = str .. '; ' .. k
+      elseif type(v) == 'table' then
+        for _, v in ipairs(v) do
+          if v == true then str = str .. '; ' .. k
+          else str = str .. '; ' .. k .. '=' .. enqute(tostring(v)) end
+        end
+      else str = str .. '; ' .. k .. '=' .. enqute(tostring(v)) end
+    end
   end
   return str
 end

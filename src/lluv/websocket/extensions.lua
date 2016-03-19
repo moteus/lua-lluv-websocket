@@ -1,4 +1,7 @@
 local ut = require "lluv.utils"
+local handshake = require "lluv.websocket.handshake"
+
+local encode_header, decode_header = handshake.encode_header, handshake.decode_header
 
 local tappend   = function(t, v) t[#t + 1] = v return t end
 
@@ -96,12 +99,17 @@ function Extensions:offer()
 
   self._offered = extensions
 
-  return offer
+  return encode_header(offer)
 end
 
 -- Accept extension negotiation response
 function Extensions:accept(params)
   assert(self._offered, 'try accept without offer')
+
+  params = decode_header(params)
+  if not params then
+    return Error.new(Error.EINVAL, nil, 'invalid header value', params)
+  end
 
   local active, offered = {}, self._offered
   self._offered = nil
@@ -141,6 +149,9 @@ end
 
 -- Generate extension negotiation response
 function Extensions:response(offers)
+  offers = decode_header(offers)
+  if not offers then return end
+
   local params_by_name = {}
   for _, offer in ipairs(offers) do
     local name, params = offer[1], offer[2]
@@ -182,7 +193,7 @@ function Extensions:response(offers)
 
   if active[1] then
     self._active = active
-    return response
+    return encode_header(response)
   end
 end
 

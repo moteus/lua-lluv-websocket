@@ -14,6 +14,14 @@ local decode_header_lpeg   = handshake._decode_header_lpeg
 local decode_header_native = handshake._decode_header_native 
 local decode_header        = decode_header_lpeg or decode_header_native
 local encode_header        = handshake.encode_header
+local H                    = encode_header
+
+local D = function(s, ...)
+  if type(s) == 'string' then
+    return decode_header(s), ...
+  end
+  return t, ...
+end
 
 local function E(t)
   t.name = t[1]
@@ -190,16 +198,16 @@ function teardown()
 end
 
 function test_accept()
-  local offer = assert_table(ext:offer())
+  local offer = assert_table(D(ext:offer()))
   assert_equal(0, #offer)
-  local ok, err = assert_nil(ext:accept({{'permessage-deflate'}}))
+  local ok, err = assert_nil(ext:accept(H{{'permessage-deflate'}}))
 end
 
 function test_offer()
   assert(ext:reg(E{'permessage-foo', true, false, false,
     offer  = function() return {value = true} end
   }))
-  local offer = assert_table(ext:offer())
+  local offer = assert_table(D(ext:offer()))
   assert_equal(1, #offer)
   assert_equal('permessage-foo', offer[1][1])
   local params = assert_table(offer[1][2])
@@ -219,12 +227,12 @@ function test_duplicate_rsv_bit()
     offer = {bar_param=true};
   }))
 
-  local offer = assert_table(ext:offer())
+  local offer = assert_table(D(ext:offer()))
   assert_equal(2, #offer)
   assert_equal('permessage-foo', offer[1][1])
   assert_equal('permessage-bar', offer[2][1])
 
-  assert(ext:accept({{'permessage-bar'}}))
+  assert(ext:accept(H{{'permessage-bar'}}))
 
   assert('permessage-bar', ext:accepted('permessage-bar'))
   assert_nil(ext:accepted('permessage-foo'))
@@ -253,12 +261,12 @@ function test_encode_decode()
     end;
   }))
 
-  local offer = assert_table(ext:offer())
+  local offer = assert_table(D(ext:offer()))
   assert_equal(2, #offer)
   assert_equal('permessage-foo', offer[1][1])
   assert_equal('permessage-bar', offer[2][1])
 
-  assert(ext:accept({{'permessage-bar'}, {'permessage-foo'}}))
+  assert(ext:accept(H{{'permessage-bar'}, {'permessage-foo'}}))
 
   assert_equal('permessage-bar', ext:accepted('permessage-bar'))
   assert_equal('permessage-foo', ext:accepted('permessage-foo'))
@@ -300,12 +308,12 @@ function test_duplicate_rsv_bit_accept()
     offer = {bar_param=true};
   }))
 
-  local offer = assert_table(ext:offer())
+  local offer = assert_table(D(ext:offer()))
   assert_equal(2, #offer)
   assert_equal('permessage-foo', offer[1][1])
   assert_equal('permessage-bar', offer[2][1])
 
-  local _, err = assert_nil(ext:accept({{'permessage-bar'}, {'permessage-foo'}}))
+  local _, err = assert_nil(ext:accept(H{{'permessage-bar'}, {'permessage-foo'}}))
 
   assert_not_nil(err)
   assert_match('%[WSEXT%]', tostring(err))
@@ -330,10 +338,10 @@ function test_accept_invalid_extension()
     offer = {bar_param=true};
   }))
 
-  assert_table(ext:offer())
+  assert_table(D(ext:offer()))
   local response = {{'permessage-baz'}}
 
-  local _, err = assert_nil(ext:accept(response))
+  local _, err = assert_nil(ext:accept(H(response)))
 
   assert_not_nil(err)
   assert_match('%[WSEXT%]', tostring(err))
@@ -348,10 +356,10 @@ function test_accept_multi_ext_with_same_rsv()
     offer = {bar_param=true};
   }))
 
-  assert_table(ext:offer())
+  assert_table(D(ext:offer()))
   local response = {{'permessage-bar'}, {'permessage-foo'}}
 
-  local _, err = assert_nil(ext:accept(response))
+  local _, err = assert_nil(ext:accept(H(response)))
   assert(err)
 end
 
@@ -360,12 +368,12 @@ it('should fail accept if first ext fail', function()
   assert(ext:reg(E{'permessage-foo', true, accept = {nil, ERROR}}))
   assert(ext:reg(E{'permessage-bar', false, true}))
 
-  local offer = assert_table(ext:offer())
+  local offer = assert_table(D(ext:offer()))
   assert_equal(2, #offer)
   assert_equal('permessage-foo', offer[1][1])
   assert_equal('permessage-bar', offer[2][1])
 
-  local _, err = assert_nil(ext:accept({{'permessage-foo'}, {'permessage-bar'}}))
+  local _, err = assert_nil(ext:accept(H{{'permessage-foo'}, {'permessage-bar'}}))
   assert_equal(ERROR, err)
 
   assert_nil(ext:accepted())
@@ -378,12 +386,12 @@ it('should fail accept if second ext fail', function()
   assert(ext:reg(E{'permessage-foo', true}))
   assert(ext:reg(E{'permessage-bar', false, true, accept = {nil, ERROR}}))
 
-  local offer = assert_table(ext:offer())
+  local offer = assert_table(D(ext:offer()))
   assert_equal(2, #offer)
   assert_equal('permessage-foo', offer[1][1])
   assert_equal('permessage-bar', offer[2][1])
 
-  local _, err = assert_nil(ext:accept({{'permessage-foo'}, {'permessage-bar'}}))
+  local _, err = assert_nil(ext:accept(H{{'permessage-foo'}, {'permessage-bar'}}))
   assert_equal(ERROR, err)
 
   assert_nil(ext:accepted())
@@ -396,12 +404,12 @@ it('should accept multiple ext', function()
   assert(ext:reg(E{'permessage-foo', true}))
   assert(ext:reg(E{'permessage-bar', false, true}))
 
-  local offer = assert_table(ext:offer())
+  local offer = assert_table(D(ext:offer()))
   assert_equal(2, #offer)
   assert_equal('permessage-foo', offer[1][1])
   assert_equal('permessage-bar', offer[2][1])
 
-  assert(ext:accept({{'permessage-bar'}, {'permessage-foo'}}))
+  assert(ext:accept(H{{'permessage-bar'}, {'permessage-foo'}}))
 
   local t = assert_table(ext:accepted())
   assert_equal('permessage-bar', t[1])
@@ -445,22 +453,22 @@ function test_response()
     {'permessage-foo',{param_foo=true}},
   }
 
-  local response = assert_table(ext:response(offer))
+  local response = assert_table(D(ext:response(H(offer))))
 
   assert_equal(1, #response)
   local resp_foo = assert_table(response[1])
   assert_equal('permessage-foo', resp_foo[1])
   assert_table(resp_foo[2])
-  assert_false(resp_foo[2].param_foo)
+  assert_equal('false', resp_foo[2].param_foo)
 end
 
 it('should accept match', function()
   assert(ext:reg(E{'permessage-foo', true}))
 
   local offer = {{'permessage-bar'}, {'permessage-foo'}}
-  local resp = assert_table(ext:response(offer))
+  local resp = assert_table(D(ext:response(H(offer))))
 
-  local response = assert_table(ext:response(offer))
+  local response = assert_table(D(ext:response(H(offer))))
 
   assert_equal(1, #response)
   local resp_foo = assert_table(response[1])
@@ -475,9 +483,9 @@ it('should accept first ext with same rsv bit', function()
   assert(ext:reg(E{'permessage-bar', true}))
 
   local offer = {{'permessage-bar'}, {'permessage-foo'}}
-  local resp = assert_table(ext:response(offer))
+  local resp = assert_table(D(ext:response(H(offer))))
 
-  local response = assert_table(ext:response(offer))
+  local response = assert_table(D(ext:response(H(offer))))
 
   assert_equal(1, #response)
   local resp = assert_table(response[1])
@@ -491,10 +499,10 @@ it('should accept first option set', function()
     called = true
     assert_equal(2, #params)
     local param = assert_table(params[1])
-    assert_equal(1, param.value)
+    assert_equal('1', param.value)
 
     param = assert_table(params[2])
-    assert_equal(2, param.value)
+    assert_equal('2', param.value)
 
     return param
   end}))
@@ -503,14 +511,14 @@ it('should accept first option set', function()
     {'permessage-foo', {value = 1}},
     {'permessage-foo', {value = 2}},
   }
-  local resp = assert_table(ext:response(offer))
+  local resp = assert_table(D(ext:response(H(offer))))
 
-  local response = assert_table(ext:response(offer))
+  local response = assert_table(D(ext:response(H(offer))))
 
   assert_equal(1, #response)
   local resp = assert_table(response[1])
   assert_equal('permessage-foo', resp[1])
-  assert_equal(2, resp[2].value)
+  assert_equal('2', resp[2].value)
 
   assert_true(called)
 end)
@@ -520,7 +528,7 @@ it('should fail accept if first ext fail', function()
   assert(ext:reg(E{'permessage-bar', false, true}))
 
   local offer = {{'permessage-bar'}, {'permessage-foo'}}
-  local _, err = assert_nil(ext:response(offer))
+  local _, err = assert_nil(ext:response(H(offer)))
 
   assert_equal('ERROR', err)
   assert_nil(ext:accepted())
@@ -531,7 +539,7 @@ it('should fail accept if second ext fail', function()
   assert(ext:reg(E{'permessage-bar', false, true, response = 'ERROR'}))
 
   local offer = {{'permessage-bar'}, {'permessage-foo'}}
-  local _, err = assert_nil(ext:response(offer))
+  local _, err = assert_nil(ext:response(H(offer)))
 
   assert_equal('ERROR', err)
   assert_nil(ext:accepted())
@@ -593,9 +601,9 @@ function setup()
 
   assert(ext:reg(bar:reset()))
 
-  local offer = assert_table(ext:offer())
+  local offer = assert_table(D(ext:offer()))
 
-  assert(ext:accept({{'permessage-bar'}, {'permessage-foo'}}))
+  assert(ext:accept(H{{'permessage-bar'}, {'permessage-foo'}}))
 end
 
 it('should validate frame', function()

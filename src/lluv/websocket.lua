@@ -444,7 +444,7 @@ function WSSocket:_client_handshake(key, req, cb)
 
     if trace then trace("WS HS DONE>", "buffer size:", self._buffer:size()) end
 
-    local extensions = handshake.decode_header(headers['sec-websocket-extensions'])
+    local extensions = headers['sec-websocket-extensions']
     if extensions and #extensions then
       if not self._extensions then
         -- we get extension response but we do not send offer
@@ -452,8 +452,8 @@ function WSSocket:_client_handshake(key, req, cb)
       end
 
       local ok, err = self._extensions:accept(extensions)
-      if err and not ok then
-        -- we get error while check accept options
+      if not ok then
+        -- we have to either accept all extensions or close connection
         return protocol_error(self, 1010, "Unsupported extension", cb, false, err)
       end
     else self._extensions = nil end
@@ -523,7 +523,7 @@ function WSSocket:_server_handshake(cb)
         local resp, err = self._extensions:response(extensions)
         if resp and #resp > 0 then
           tappend(response,
-            'Sec-WebSocket-Extensions: ' .. handshake.encode_header(resp)
+            'Sec-WebSocket-Extensions: ' .. resp
           )
         else self._extensions = nil end
 
