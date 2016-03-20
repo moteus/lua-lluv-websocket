@@ -1,12 +1,67 @@
 -- Code based on https://github.com/lipp/lua-websockets
 
-local split = require 'lluv.websocket.split'
 local tools = require 'lluv.websocket.tools'
 local sha1, base64 = tools.sha1, tools.base64
 
 local guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
-local decode_header, encode_header
+local function tappend(t, v)
+  t[#t+1]=v
+  return t
+end
+
+local function trim(s)
+  return string.match(s, "^%s*(.-)%s*$")
+end
+
+local function unquote(s)
+  if string.sub(s, 1, 1) == '"' then
+    s = string.sub(s, 2, -2)
+    s = string.gsub(s, "\\(.)", "%1")
+  end
+  return s
+end
+
+local function enqute(s)
+  if string.find(s, '[ ",;]') then
+    s = '"' .. string.gsub(s, '"', '\\"') .. '"'
+  end
+  return s
+end
+
+------------------------------------------------------------------
+local split = {} do
+function split.iter(str, sep, plain)
+  local b, eol = 0
+  return function()
+    if b > #str then
+      if eol then eol = nil return "" end
+      return
+    end
+
+    local e, e2 = string.find(str, sep, b, plain)
+    if e then
+      local s = string.sub(str, b, e-1)
+      b = e2 + 1
+      if b > #str then eol = true end
+      return s
+    end
+
+    local s = string.sub(str, b)
+    b = #str + 1
+    return s
+  end
+end
+
+function split.first(str, sep, plain)
+  local e, e2 = string.find(str, sep, nil, plain)
+  if e then
+    return string.sub(str, 1, e - 1), string.sub(str, e2 + 1)
+  end
+  return str
+end
+end
+------------------------------------------------------------------
 
 local sec_websocket_accept = function(sec_websocket_key)
   local a = sec_websocket_key..guid
@@ -16,43 +71,47 @@ local sec_websocket_accept = function(sec_websocket_key)
 end
 
 local http_headers = function(request)
+  local header, request = split.first(request, '\r\n')
+
   local headers = {}
-  if not request:match('.*HTTP/1%.1') then
+  if not header:match('.*HTTP/1%.1') then
     return headers
   end
 
-  request = request:match('[^\r\n]+\r\n(.*)')
-  local empty_line
-  for line in request:gmatch('[^\r\n]*\r\n') do
-    local name,val = line:match('([^%s]+)%s*:%s*([^\r\n]+)')
+  for line in split.iter(request, '\r\n') do
+    if line == '' then break end
+
+    local name, val = split.first(line, '%s*:%s*')
     if name and val then
-      name = name:lower()
-      if not name:match('sec%-websocket') then
-        val = val:lower()
+      val  = trim(val)
+      name = string.lower(name)
+      if not string.match(name, 'sec%-websocket') then
+        val = string.lower(val)
       end
+
       if not headers[name] then
         headers[name] = val
       else
-        headers[name] = headers[name]..','..val
+        headers[name] = headers[name]..', '..val
       end
-    elseif line == '\r\n' then
-      empty_line = true
     else
-      assert(false,line..'('..#line..')')
+      --! @fixme return error so server can just shutdown connections
+      assert(false, line..'('..#line..')')
     end
   end
-  return headers,request:match('\r\n\r\n(.*)')
+
+  return headers, request:match('\r\n\r\n(.*)')
 end
 
 local upgrade_request = function(req)
   local format = string.format
   local lines = {
-    format('GET %s HTTP/1.1',req.uri or ''),
-    format('Host: %s',req.host),
+    format('GET %s HTTP/1.1', req.uri or ''),
+    format('Host: %s', req.host),
     'Upgrade: websocket',
     'Connection: Upgrade',
-    format('Sec-WebSocket-Key: %s',req.key),
-    format('Sec-WebSocket-Protocol: %s',table.concat(req.protocols,', ')),
+    format('Sec-WebSocket-Key: %s', req.key),
+    format('Sec-WebSocket-Protocol: %s', table.concat(req.protocols,', ')),
     'Sec-WebSocket-Version: 13',
   }
   if req.origin then
@@ -73,22 +132,37 @@ end
 
 local accept_upgrade = function(request, protocols)
   local headers = http_headers(request)
-  if headers['upgrade'] ~= 'websocket' or
-  not headers['connection'] or
-  not headers['connection']:match('upgrade') or
-  headers['sec-websocket-key'] == nil or
-  headers['sec-websocket-version'] ~= '13' then
+
+  if not headers['upgrade'] or
+     not headers['connection'] or
+     not headers['sec-websocket-key'] or
+     not headers['sec-websocket-version'] or
+     unquote(headers['upgrade']) ~= 'websocket'
+  then
     return nil,'HTTP/1.1 400 Bad Request\r\n\r\n'
   end
 
-  local prot
+  local accept
+  for connection in split.iter(headers['connection'], "%s*,%s*") do
+    if unquote(connection) == 'upgrade' then
+      accept = true
+      break
+    end
+  end
 
-  local require_protocols = decode_header(headers['sec-websocket-protocol'])
-  if require_protocols then
-    for _, protocol in ipairs(require_protocols) do
+  if not accept then return nil,'HTTP/1.1 400 Bad Request\r\n\r\n' end
+
+  if unquote(headers['sec-websocket-version']) ~= '13' then
+    return nil, 'HTTP/1.1 400 Bad Request\r\nSec-WebSocket-Version: 13\r\n\r\n'
+  end
+
+  local prot
+  if headers['sec-websocket-protocol'] then
+    for protocol in split.iter(headers['sec-websocket-protocol'], "%s*,%s*") do
+      protocol = unquote(protocol)
       for _,supported in ipairs(protocols) do
-        if supported == protocol[1] then
-          prot = protocol[1]
+        if supported == protocol then
+          prot = protocol
           break
         end
       end
@@ -97,166 +171,17 @@ local accept_upgrade = function(request, protocols)
   end
 
   local accept_key = sec_websocket_accept(headers['sec-websocket-key'])
-  local connection = headers['connection']
-  local extensions = headers['sec-websocket-extensions']
 
-  local lines = {
+  local response = {
     'HTTP/1.1 101 Switching Protocols',
     'Upgrade: websocket',
-    'Connection: '           .. connection,
+    'Connection: '           .. headers['connection'],
     'Sec-WebSocket-Accept: ' .. accept_key,
   }
 
-  if prot then
-    lines[#lines + 1] = 'Sec-WebSocket-Protocol: ' .. prot
-  end
+  if prot then tappend(response, 'Sec-WebSocket-Protocol: ' .. enqute(prot)) end
 
-  return lines, prot, extensions
-end
-
-local function tappend(t, v)
-  t[#t+1]=v
-  return t
-end
-
-local function happend(t, v)
-  if not t then return v end
-  if type(t)=='table' then
-    return tappend(t, v)
-  end
-  return {t, v}
-end
-
-local function trim(s)
-  return string.match(s, "^%s*(.-)%s*$")
-end
-
-local function itrim(t)
-  for i = 1, #t do t[i] = trim(t[i]) end
-  return t
-end
-
-local function prequre(...)
-  local ok, mod = pcall(require, ...)
-  if not ok then return nil, mod, ... end
-  return mod, ...
-end
-
-local function unquote(s)
-  if string.sub(s, 1, 1) == '"' then
-    s = string.sub(s, 2, -2)
-    s = string.gsub(s, "\\(.)", "%1")
-  end
-  return s
-end
-
-local function enqute(s)
-  if string.find(s, '[ ",;]') then
-    s = '"' .. string.gsub(s, '"', '\\"') .. '"'
-  end
-  return s
-end
-
-local function decode_header_native(str)
-  -- does not support `,` or `;` in values
-
-  if not str then return end
-
-  local res = {}
-  for ext in split.iter(str, "%s*,%s*") do
-    local name, tail = split.first(ext, '%s*;%s*')
-    if #name > 0 then
-      local opt  = {}
-      if tail then
-        for param in split.iter(tail, '%s*;%s*') do
-          local k, v = split.first(param, '%s*=%s*')
-          opt[k] = happend(opt[k], v and unquote(v) or true)
-        end
-      end
-      res[#res + 1] = {name, opt}
-    end
-  end
-
-  return res
-end
-
-local lpeg, decode_header_lpeg = (prequre 'lpeg') if lpeg then
-  local P, C, Cs, Ct, Cp = lpeg.P, lpeg.C, lpeg.Cs, lpeg.Ct, lpeg.Cp
-  local nl          = P('\n')
-  local any         = P(1)
-  local eos         = P(-1)
-  local quot        = '"'
-
-  -- split params
-  local unquoted    = (any - (nl + P(quot) + P(',') + eos))^1
-  local quoted      = P(quot) * ((P('\\') * P(quot) + (any - P(quot)))^0) * P(quot)
-  local field       = Cs( (quoted + unquoted)^0 )
-  local params      = Ct(field * ( P(',') * field )^0) * (nl + eos) * Cp()
-
-  -- split options
-  local quoted_pair = function (ch) return ch:sub(2) end
-  local unquoted    = (any - (nl + P(quot) + P(';') + P('=') + eos))^1
-  local quoted      = (P(quot) / '') * (
-    (
-      P('\\') * any / quoted_pair +
-      (any - P(quot))
-    )^0
-  ) * (P(quot) / '')
-  local kv          = unquoted * P'=' * (quoted + unquoted)
-  local field       = Cs(kv + unquoted)
-  local options     = Ct(field * ( P(';') * field )^0) * (nl + eos) * Cp()
-
-  function decode_header_lpeg(str)
-    if not str then return str end
-
-    local h = params:match(str)
-    if not h then return nil end
-
-    local res = {}
-    for i = 1, #h do
-      local o = options:match(h[i])
-      if o then
-        itrim(o)
-        local name, opt = o[1], {}
-        for j = 2, #o do
-          local k, v = split.first(o[j], '%s*=%s*')
-          opt[k] = happend(opt[k], v or true)
-        end
-        res[#res + 1] = {name, opt}
-      end
-    end
-
-    return res
-  end
-end
-
-decode_header = decode_header_lpeg or decode_header_native
-
-local function encode_header_options(name, options)
-  local str = name
-  if options then
-    for k, v in pairs(options) do
-      if v == true then str = str .. '; ' .. k
-      elseif type(v) == 'table' then
-        for _, v in ipairs(v) do
-          if v == true then str = str .. '; ' .. k
-          else str = str .. '; ' .. k .. '=' .. enqute(tostring(v)) end
-        end
-      else str = str .. '; ' .. k .. '=' .. enqute(tostring(v)) end
-    end
-  end
-  return str
-end
-
-function encode_header(t)
-  if not t then return end
-
-  local res = {}
-  for _, val in ipairs(t) do
-    tappend(res, encode_header_options(val[1], val[2]))
-  end
-
-  return table.concat(res, ', ')
+  return response, prot, headers['sec-websocket-extensions']
 end
 
 return {
@@ -264,10 +189,4 @@ return {
   http_headers = http_headers,
   accept_upgrade = accept_upgrade,
   upgrade_request = upgrade_request,
-  decode_header = decode_header,
-  encode_header = encode_header,
-
-  -- NOT PUBLIC API
-  _decode_header_lpeg = decode_header_lpeg;
-  _decode_header_native = decode_header_native;
 }

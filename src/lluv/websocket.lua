@@ -12,13 +12,19 @@
 
 local trace -- = function(...) print(os.date("[WS ][%x %X]"), ...) end
 
+local function prequire(mod)
+  local ok, err = pcall(require, mod)
+  if not ok then return nil, err end
+  return err, mod
+end
+
 local uv         = require "lluv"
 local ut         = require "lluv.utils"
 local tools      = require "lluv.websocket.tools"
 local frame      = require "lluv.websocket.frame"
 local handshake  = require "lluv.websocket.handshake"
 local WSError    = require "lluv.websocket.error"
-local Extensions = require "lluv.websocket.extensions"
+local Extensions = prequire"websocket.extensions"
 
 local ok, ssl   = pcall(require, 'lluv.ssl')
 if not ok then ssl = nil end
@@ -444,19 +450,13 @@ function WSSocket:_client_handshake(key, req, cb)
 
     if trace then trace("WS HS DONE>", "buffer size:", self._buffer:size()) end
 
-    local extensions = headers['sec-websocket-extensions']
-    if extensions and #extensions then
-      if not self._extensions then
-        -- we get extension response but we do not send offer
-        return protocol_error(self, 1010, "Unsupported extension", cb)
-      end
-
-      local ok, err = self._extensions:accept(extensions)
+    if self._extensions then
+      local ok, err = self._extensions:accept(headers['sec-websocket-extensions'])
       if not ok then
-        -- we have to either accept all extensions or close connection
-        return protocol_error(self, 1010, "Unsupported extension", cb, false, err)
+        if err then return protocol_error(self, 1010, "Unsupported extension", cb, false, err) end
+        self._extensions = nil
       end
-    else self._extensions = nil end
+    end
 
     cb(self, nil, headers)
   end)
@@ -518,19 +518,13 @@ function WSSocket:_server_handshake(cb)
     end
 
     local response_error
-    if extensions and #extensions > 0 then
-      if self._extensions then
-        local resp, err = self._extensions:response(extensions)
-        if resp and #resp > 0 then
-          tappend(response,
-            'Sec-WebSocket-Extensions: ' .. resp
-          )
-        else self._extensions = nil end
-
-        if (not resp) and err then
-          response_error = err;
-          response = {"HTTP/1.1 400 " .. err:msg()}
-        end
+    if self._extensions then
+      local resp, err = self._extensions:response(extensions)
+      if resp then
+        tappend(response, 'Sec-WebSocket-Extensions: ' .. resp)
+      elseif err then
+        response_error = err
+        response = {"HTTP/1.1 400 " .. err:msg()}
       end
     end
 
@@ -1050,6 +1044,10 @@ function WSSocket:getpeername()
 end
 
 function WSSocket:register(...)
+  if not Extensions then
+    return nil, 'Extension module not installed'
+  end
+
   if not self._extensions then
     self._extensions = Extensions.new()
   end

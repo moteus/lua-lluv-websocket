@@ -1,7 +1,7 @@
 local uv          = require "lluv"
 local websocket   = require "lluv.websocket"
 local Autobahn    = require "./autobahn"
-websocket.deflate = require "lluv.websocket.extensions.permessage-deflate"
+local deflate     = require "websocket.extensions.permessage-deflate"
 
 local ctx do
   local ok, ssl = pcall(require, "lluv.ssl")
@@ -55,7 +55,7 @@ function runTestCase(no, cb)
 
   websocket
   .new{ssl = ctx, utf8 = true}
-  :register(websocket.deflate)
+  :register(deflate)
   :connect(ws_uri, "echo", function(cli, err)
     if err then
       print("Client connect error:", err)

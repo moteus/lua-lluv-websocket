@@ -45,15 +45,15 @@ before_install:
   - luarocks show lluv      || luarocks install lluv     UV_DIR=$TRAVIS_BUILD_DIR/libuv
   - luarocks show lluv-ssl  || luarocks install lluv-ssl 
   - luarocks show basexx    || luarocks install basexx
-  - luarocks show lpeg      || luarocks install lpeg
-  # - luarocks show lbase64   || luarocks install lbase64
-  # - luarocks show luacrypto || luarocks install luacrypto
+  - luarocks show lzlib     || luarocks install lzlib
   - if [ "$LUA" == "lua 5.1" ]; then
       luarocks show bit32 || luarocks install bit32;
     fi
   - luarocks show lua-websockets-core || luarocks install lua-websockets-core --server=http://luarocks.org/dev --deps-mode=none
 
 install:
+  - luarocks install https://raw.githubusercontent.com/moteus/lua-websockets-extensions/master/rockspecs/lua-websockets-extensions-scm-0.rockspec
+  - luarocks install https://raw.githubusercontent.com/moteus/lua-websockets-permessage-deflate/master/rockspecs/lua-websockets-permessage-deflate-scm-0.rockspec
   - luarocks make rockspecs/lluv-websocket-scm-0.rockspec --deps-mode=none
   - luarocks make rockspecs/lua-websockets-lluv-scm-0.rockspec --deps-mode=none
 
@@ -66,15 +66,6 @@ before_script:
 script: 
   - cd test
   - lua -lluacov test.lua
-  - lunit.sh test_extensions.lua
-  
-  # test deflate with lzlib
-  - luarocks install lzlib && lunit.sh test_deflate.lua
-
-  # test deflate with lua-zlib
-  - if [ "$LUA" != "lua 5.3" ]; then
-    luarocks remove lzlib && luarocks install lua-zlib && lunit.sh test_deflate.lua;
-    fi
 
   #                         Client tests
   - wstest -m fuzzingserver &
