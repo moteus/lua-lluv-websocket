@@ -14,7 +14,6 @@ description = {
 
 dependencies = {
   "lua >= 5.1, < 5.4",
-  -- "lua-websockets-core",
   "lluv > 0.1.1",
 }
 
@@ -31,9 +30,6 @@ build = {
     ['lluv.websocket.split']          = 'src/lluv/websocket/split.lua',
     ['lluv.websocket.handshake']      = 'src/lluv/websocket/handshake.lua',
     ['lluv.websocket.luasocket']      = 'src/lluv/websocket/luasocket.lua',
-    ['lluv.websocket.extensions']     = 'src/lluv/websocket/extensions.lua',
     ['lluv.websocket.utf8_validator'] = 'src/lluv/websocket/utf8_validator.lua',
-
-    ['lluv.websocket.extensions.permessage-deflate'] = 'src/lluv/websocket/extensions/permessage-deflate.lua',
   }
 }
