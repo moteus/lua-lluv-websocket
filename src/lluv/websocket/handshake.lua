@@ -64,7 +64,7 @@ end
 ------------------------------------------------------------------
 
 local sec_websocket_accept = function(sec_websocket_key)
-  local a = sec_websocket_key..guid
+  local a = sec_websocket_key .. guid
   local sha1 = sha1(a)
   assert((#sha1 % 2) == 0)
   return base64.encode(sha1)
@@ -104,22 +104,29 @@ local http_headers = function(request)
 end
 
 local upgrade_request = function(req)
-  local format = string.format
   local lines = {
-    format('GET %s HTTP/1.1', req.uri or ''),
-    format('Host: %s', req.host),
+    string.format('GET %s HTTP/1.1', req.uri or ''),
+    'Host: ' .. req.host,
     'Upgrade: websocket',
     'Connection: Upgrade',
-    format('Sec-WebSocket-Key: %s', req.key),
-    format('Sec-WebSocket-Protocol: %s', table.concat(req.protocols,', ')),
+    'Sec-WebSocket-Key: ' .. req.key,
     'Sec-WebSocket-Version: 13',
   }
+
+  if req.protocols and #req.protocols > 0 then
+    local h = ''
+    for i = 1, #req.protocols do
+      h = h .. (i > 1 and ', ' or '') .. enqute(req.protocols[i])
+    end
+    lines[#lines + 1] =  'Sec-WebSocket-Protocol: ' .. h
+  end
+
   if req.origin then
-    lines[#lines + 1] = string.format('Origin: %s',req.origin)
+    lines[#lines + 1] = 'Origin: ' .. req.origin
   end
 
   if req.port and req.port ~= 80 then
-    lines[2] = format('Host: %s:%d',req.host,req.port)
+    lines[2] = format('Host: %s:%d', req.host, req.port)
   end
 
   if req.extensions and #req.extensions > 0 then

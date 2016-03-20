@@ -66,6 +66,7 @@ before_script:
 script: 
   - cd test
   - lua -lluacov test.lua
+  - lunit.sh test_handshake.lua
 
   #                         Client tests
   - wstest -m fuzzingserver &
