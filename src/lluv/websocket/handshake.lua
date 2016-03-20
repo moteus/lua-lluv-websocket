@@ -126,7 +126,7 @@ local upgrade_request = function(req)
   end
 
   if req.port and req.port ~= 80 then
-    lines[2] = format('Host: %s:%d', req.host, req.port)
+    lines[2] = string.format('Host: %s:%d', req.host, req.port)
   end
 
   if req.extensions and #req.extensions > 0 then

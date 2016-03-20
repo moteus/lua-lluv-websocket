@@ -280,6 +280,20 @@ it('should make upgrade with extensions', function()
   assert_match("Sec%-WebSocket%-Extensions: permessage%-foo", req)
 end)
 
+it('should make upgrade with non standart port', function()
+  local req = assert_string(handshake.upgrade_request{
+    key        = key,
+    host       = '127.0.0.1',
+    port       = 8024,
+    protocols  = {},
+    origin     = '',
+    uri        = '/',
+    extensions = '',
+  })
+  assert_match("GET[^\r\n]-HTTP/1%.1", req)
+  assert_match("Host: 127.0.0.1:8024", req)
+end)
+
 end
 ------------------------------------------------------------------
 
