@@ -19,20 +19,21 @@ local bit_6   = bits(6)
 local bit_7   = bits(7)
 local bit_0_6 = bits(0,1,2,3,4,5,6)
 
-local function xor_mask(encoded, pos, mask, payload)
+local function xor_mask(encoded, pos, mask, payload, offset)
   local transformed, transformed_arr = {},{}
-  local fin = pos+payload-1
+  local fin, m = pos+payload-1, #mask
+  offset = offset or 0
   for p=pos,fin,2000 do
     local last = math.min(p+1999,fin)
     local original = {string.byte(encoded,p,last)}
     for i=1,#original do
-      local j = (i-1) % 4 + 1
+      local j = (i + offset - 1) % m + 1
       transformed[i] = bit.bxor(original[i],mask[j])
     end
     local xored = string.char(unpack(transformed,1,#original))
     transformed_arr[#transformed_arr + 1] = xored
   end
-  return table.concat(transformed_arr)
+  return table.concat(transformed_arr), (offset + payload) % m
 end
 
 local decode_by_pos = function(encoded, pos)

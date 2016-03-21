@@ -1,7 +1,7 @@
-local uv          = require "lluv"
-local websocket   = require "lluv.websocket"
-local Autobahn    = require "./autobahn"
-deflate           = require "websocket.extensions.permessage-deflate"
+local uv       = require "lluv"
+uv.ws          = require "lluv.websocket"
+local Autobahn = require "./autobahn"
+deflate        = require "websocket.extensions.permessage-deflate"
 
 local ctx do
   local ok, ssl = pcall(require, "lluv.ssl")
@@ -75,7 +75,7 @@ function runTest(cb)
   print("MODE:", read_pat .. "/" .. decode_mode)
 
   local currentCaseId = 0
-  local server = websocket.new{ssl = ctx, utf8 = true}
+  local server = uv.ws{ssl = ctx, utf8 = true}
   server:register(deflate)
   server:bind(url, "echo", function(self, err)
     if err then
@@ -97,7 +97,7 @@ function runTest(cb)
 
       local cli = server:accept()
       if decode_mode == "chunk" then
-        cli._on_raw_data = assert(websocket.__on_raw_data_by_chunk)
+        cli._on_raw_data = assert(uv.ws.__on_raw_data_by_chunk)
       end
 
       currentCaseId = currentCaseId + 1
@@ -121,9 +121,14 @@ function runTest(cb)
             return cli:close()
           end
 
-          if opcode == websocket.CONTINUATION or opcode == websocket.TEXT or opcode == websocket.BINARY then
+          if opcode == uv.ws.CONTINUATION or opcode == uv.ws.TEXT or opcode == uv.ws.BINARY then
             cli:write(message, opcode, fin)
           end
+
+          if opcode == uv.ws.PING then
+            cli:write(message, uv.ws.PONG, fin)
+          end
+
         end)
       end)
     end)

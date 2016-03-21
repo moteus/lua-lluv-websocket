@@ -1,7 +1,7 @@
-local uv          = require "lluv"
-local websocket   = require "lluv.websocket"
-local Autobahn    = require "./autobahn"
-local deflate     = require "websocket.extensions.permessage-deflate"
+local uv       = require "lluv"
+uv.ws          = require "lluv.websocket"
+local Autobahn = require "./autobahn"
+local deflate  = require "websocket.extensions.permessage-deflate"
 
 local ctx do
   local ok, ssl = pcall(require, "lluv.ssl")
@@ -30,7 +30,7 @@ end
 function getCaseCount(cont)
   local ws_uri = Autobahn.Server.getCaseCount(URI)
 
-  websocket.new{ssl = ctx}:connect(ws_uri, "echo", function(cli, err)
+  uv.ws{ssl = ctx}:connect(ws_uri, "echo", function(cli, err)
     if err then
       print("Client connect error:", err)
       return cli:close()
@@ -53,8 +53,7 @@ end
 function runTestCase(no, cb)
   local ws_uri = Autobahn.Server.runTestCase(URI, no, agent)
 
-  websocket
-  .new{ssl = ctx, utf8 = true}
+  uv.ws{ssl = ctx, utf8 = true}
   :register(deflate)
   :connect(ws_uri, "echo", function(cli, err)
     if err then
@@ -72,10 +71,12 @@ function runTestCase(no, cb)
         return cli:close(cb)
       end
 
-      if opcode == websocket.TEXT or opcode == websocket.BINARY or opcode == websocket.CONTINUATION then
+      if opcode == uv.ws.TEXT or opcode == uv.ws.BINARY or opcode == uv.ws.CONTINUATION then
         cli:write(message, opcode, fin)
       end
-
+      if opcode == uv.ws.PING then
+        cli:write(message, uv.ws.PONG, fin)
+      end
     end)
   end)
 end
@@ -83,7 +84,7 @@ end
 function updateReports()
   local ws_uri = Autobahn.Server.updateReports(URI, agent)
 
-  websocket.new{ssl = ctx}:connect(ws_uri, "echo", function(cli, err)
+  uv.ws{ssl = ctx}:connect(ws_uri, "echo", function(cli, err)
     if err then
       print("Client connect error:", err)
       return cli:close()

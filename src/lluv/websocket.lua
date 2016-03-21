@@ -150,9 +150,9 @@ local WSSocket = ut.class() do
 -- CLOSED not connected or closed handshake
 -- WAIT_DATA data transfer mode
 -- WAIT_CLOSE client call close method and we wait timeout or response
--- CLOSE_PENDING we recv CLOSE frame but client do not call close method 
---          we wait response and stop read messages
--- CLOSE_PENDING2 we send CLOSE frame but client do not call close method 
+-- PEER_SHUTDOWN we recv CLOSE frame but client do not call close method 
+--          we do not send CLOSE yet. We do not read input any more
+-- HOST_SHUTDOWN we send CLOSE frame but client do not call close method 
 --          we wait response and stop read messages.
 
 local function is_sock(s)
@@ -181,7 +181,7 @@ local function protocol_error(self, code, msg, read_cb, shutdown, read_err)
     -- we call read callback so we have to prevent second call of read callback
     -- But we have to continue read to wait CLOSE response so we can not stop_read
     self._read_cb = nil
-    self._state = 'CLOSE_PENDING2'
+    self._state = 'HOST_SHUTDOWN'
     self:write(encoded, CLOSE)
   end
 
@@ -592,6 +592,7 @@ function WSSocket:close(code, reason, cb)
     return self:_close(true, code, reason, cb)
   end
 
+  -- we already send/recv CLOSE
   if self._state == 'CLOSED' then
     return self:_close(true, self._code, self._reason, cb)
   end
@@ -601,11 +602,25 @@ function WSSocket:close(code, reason, cb)
     return self:_close(false, code, reason, cb)
   end
 
-  if self._state == 'WAIT_DATA' then -- We in regular data transfer state
-    self._state = 'WAIT_CLOSE'
-
+  -- We in regular data or recv CLOSE
+  -- We should send CLOSE
+  if self._state == 'WAIT_DATA' or self._state == 'PEER_SHUTDOWN' then
     local encoded = frame.encode_close(code, reason)
-    self:write(encoded, CLOSE)
+    self:write(encoded, CLOSE, function()
+      if self._state == 'PEER_SHUTDOWN' then
+        return self:_close(true, self._code, self._reason, cb)
+      end
+      if self._state == 'WAIT_CLOSE' then
+        self._state = 'CLOSED'
+      end
+    end)
+  end
+
+  -- We in regular data transfer state or we already send CLOSE
+  -- We should wait CLOSE response
+  if self._state == 'WAIT_DATA' or self._state == 'HOST_SHUTDOWN' then 
+
+    self._state = 'WAIT_CLOSE'
 
     start_close_timer(self, 3) --! @todo fix hardcoded timeout
 
@@ -613,15 +628,6 @@ function WSSocket:close(code, reason, cb)
 
     self._on_close, self._code, self._reason = cb, code, reason
 
-    return
-  end
-
-  -- We already recv CLOSE, send CLOSE and now we wait close connection from other side
-  if self._state == 'CLOSE_PENDING' or self._state == 'CLOSE_PENDING2' then
-    self._state = 'WAIT_CLOSE'
-
-    self._on_close = cb
-    start_close_timer(self, 3) --! @todo fix hardcoded timeout
     return
   end
 
@@ -673,57 +679,82 @@ local on_control = function(self, mode, cb, decoded, fin, opcode, masked, rsv1, 
   end
 
   if opcode == CLOSE then
+    local valid = true
     if #decoded >= 126 then
-      self._code, self._reason = 1002, "Too long payload"
+      self._code, self._reason = 1002, 'Too long payload'
+      valid = false
     elseif #decoded > 0 then
       self._code, self._reason = frame.decode_close(decoded)
       local ncode = tonumber(self._code)
-
+      if self._reason and #self._reason > 0 and
+        self._validator and not self._validator:validate(self._reason)
+      then
+        self._code, self._reason = 1007, 'Invalid UTF8 character'
+        valid = false
+      end
       if (not ncode or ncode < 1000)
         or (ncode <  3000 and not CLOSE_CODES[ncode])
       then
         self._code, self._reason = 1002, 'Invalid status code'
+        valid = false
       end
     else
       self._code, self._reason = 1000, ''
     end
 
+    -- after CLOSE peer can not send any data
+    --! @check may be we can use read callback to detect TCP EOF?
+    self._sock:stop_read()
+
+    if not valid then
+      -- On autobahntestsuite preffered way to handle invalid 
+      -- CLOSE is drop TCP connections
+
+      if self._state == 'WAIT_DATA' then
+        -- self._state = 'CLOSED'
+        -- self._sock:shutdown()
+        -- return cb(self, WSError_EOF(self._code, self._reason))
+        return protocol_error(self, self._code, self._reason, cb)
+      end
+
+      if self._state == 'WAIT_CLOSE' then
+        self:_close(false, self._code, self._reason, self._on_close)
+      end
+
+      self._state = 'CLOSED'
+      self._sock:shutdown()
+      return
+    end
+
+    -- User already call `close` method
     if self._state == 'WAIT_CLOSE' then
       return self:_close(true, self._code, self._reason, self._on_close)
     end
 
-    if self._state == 'CLOSE_PENDING2' then
+    -- We already send CLOSE so WS connection is closed
+    -- underlying TCP connection may be still active
+    -- but we do not need do any IO
+    if self._state == 'HOST_SHUTDOWN' then
       self._state = 'CLOSED'
-      self._sock:_stop_read():shutdown()
-      return --! @todo break decode loop in on_raw_data
+      return
     end
 
-    self._state = 'CLOSE_PENDING'
-
-    if self._reason and #self._reason > 0 and
-      self._validator and not self._validator:validate(self._reason)
-    then
-      self._code, self._reason = 1007, "Invalid UTF8 character"
-    end
-
-    local encoded = frame.encode_close(self._code, self._reason)
-    self:write(encoded, CLOSE, function(self, err)
-      if self._state == 'CLOSE_PENDING' then
-        -- we did not call `close` yet so we just wait
-        self._state = 'CLOSED'
-      elseif self._state == 'WAIT_CLOSE' then
-          -- we call `close` but timeout is not expire
-        return self:_close(true, self._code, self._reason, self._on_close)
-      end
-    end)
+    -- remote side send CLOSE
+    -- RFC 4655
+    -- It SHOULD do (response CLOSE) so as soon as practical. An endpoint 
+    -- MAY delay sending a Close frame until its current message is sent
+    self._state = 'PEER_SHUTDOWN'
 
     return cb(self, WSError_EOF(self._code, self._reason))
   elseif opcode == PING then
     if self._state == 'WAIT_DATA' then
       if #decoded >= 126 then
-        protocol_error(self, 1002, "Too long payload", cb)
-      else
+        return protocol_error(self, 1002, "Too long payload", cb)
+      end
+      if self._auto_ping_response then
         self:write(decoded, PONG)
+      else
+        cb(self, nil, decoded, opcode, true)
       end
     end
   elseif opcode == PONG then
@@ -831,7 +862,7 @@ on_raw_data_1 = function(self, data, cb, mode)
     return
   end
 
-  while self._sock and (self._read_cb == cb or self._state == 'CLOSE_PENDING2' or self._state == 'WAIT_CLOSE') do
+  while self._sock and (self._read_cb == cb or self._state == 'HOST_SHUTDOWN' or self._state == 'WAIT_CLOSE') do
     if trace then trace("RAW_ITER>", self._state) end
 
     local decoded, fin, opcode, masked, rsv1, rsv2, rsv3 = next_frame(self)
@@ -856,7 +887,7 @@ local on_raw_data_2 = function(self, data, cb, mode)
 
   local pos, encoded = 1, self._buffer:read_all()
 
-  while self._sock and (self._read_cb == cb or self._state == 'CLOSE_PENDING2' or self._state == 'WAIT_CLOSE') do
+  while self._sock and (self._read_cb == cb or self._state == 'HOST_SHUTDOWN' or self._state == 'WAIT_CLOSE') do
     if trace then trace("RAW_ITER>", self._state) end
 
     local decoded, fin, opcode, masked, rsv1, rsv2, rsv3
@@ -1148,7 +1179,7 @@ local function self_test()
 
 end
 
-return {
+local WebSocket = setmetatable({
   new = WSSocket.new;
 
   TEXT         = TEXT;
@@ -1165,4 +1196,6 @@ return {
   __self_test            = self_test;
   __on_raw_data_by_pos   = on_raw_data_by_pos;
   __on_raw_data_by_chunk = on_raw_data_by_chunk;
-}
+}, {__call = function(self, ...) return WSSocket.new(...) end})
+
+return WebSocket
