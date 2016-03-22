@@ -83,11 +83,11 @@ else
     return d | a
   end
 
-  function bit32.rrotate(...)
+  function bit.rrotate(...)
     return rrotate(64, ...)
   end
 
-  function bit32.lrotate(...)
+  function bit.lrotate(...)
     return lrotate(64, ...)
   end
 

@@ -158,7 +158,7 @@ local encode = function(data, opcode, masked, fin, rsv1, rsv2, rsv3)
     local mask = {m1,m2,m3,m4}
     encoded = table.concat{
       header, pack_bytes(m1,m2,m3,m4),
-      xor_mask(data, 1, mask, #data)
+      (xor_mask(data, 1, mask, #data))
     }
   end
 

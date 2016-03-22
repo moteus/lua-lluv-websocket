@@ -368,7 +368,8 @@ function WSSocket:write(msg, opcode, fin, cb)
     if msg[1] then
       encoded = {frame_encode(self, msg[1], opcode, fin and 1 == #msg)}
       for i = 2, #msg do
-        if #msg[i] > 0 then
+        local fin = (fin and i == #msg)
+        if fin or #msg[i] > 0 then
           tappend(encoded, frame_encode(self, msg[i], CONTINUATION, fin and i == #msg))
         end
       end
