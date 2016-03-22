@@ -1,7 +1,8 @@
-local uv        = require"lluv"
-local ut        = require"lluv.utils"
-local websocket = require"lluv.websocket.luasocket"
-local Autobahn  = require"./autobahn"
+local uv        = require "lluv"
+local ut        = require "lluv.utils"
+local websocket = require "lluv.websocket.luasocket"
+local Autobahn  = require "./autobahn"
+local deflate   = require "websocket.extensions.permessage-deflate"
 
 local ctx do
   local ok, ssl = pcall(require, "lluv.ssl")
@@ -92,12 +93,16 @@ function runTest(cb)
       if opcode == websocket.CONTINUATION or opcode == websocket.TEXT or opcode == websocket.BINARY then
         cli:send(message, opcode, fin)
       end
+
+      if opcode == websocket.PING then
+        cli:send(message, websocket.PONG, fin)
+      end
     end
     return cli:close()
   end
 
   ut.corun(function()
-    local server = websocket.ws{ssl = ctx, utf8 = true}
+    local server = websocket.ws{ssl = ctx, utf8 = true, extensions = {deflate}}
     local ok, err = server:bind(url, 'echo')
 
     if not ok then

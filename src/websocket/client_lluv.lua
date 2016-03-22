@@ -60,7 +60,9 @@ end
 function Client:connect(url, proto)
   if self._sock then return end
 
-  self._sock = websocket.new{ssl = self._ws.ssl, utf8 = self._ws.utf8}
+  self._sock = websocket.new{ssl = self._ws.ssl, utf8 = self._ws.utf8,
+    extensions = self._ws.extensions, auto_ping_response = self._ws.auto_ping_response,
+  }
 
   self._sock:connect(url, proto, function(sock, err)
     if err then return on_error(self, err) end

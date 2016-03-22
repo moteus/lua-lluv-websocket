@@ -206,6 +206,20 @@ function WSSocket:__init(opt, s)
   self._last_rsv1  = nil
   self._last_rsv2  = nil
   self._last_rsv3  = nil
+  self._auto_ping_response = opt.auto_ping_response
+
+  if opt.extensions then
+    for _, ext in ipairs(opt.extensions) do
+      local ext_opt
+      if type(ext) == 'table' then
+        if ext[1] and not ext.name then
+          -- this is pair e.g. {deflate, {client_max_window_bits=10}}
+          ext, ext_opt = ext[1], ext[2]
+        end
+        self:register(ext, ext_opt)
+      end
+    end
+  end
 
   if opt.utf8 then
     if opt.utf8 == true then
@@ -709,13 +723,16 @@ local on_control = function(self, mode, cb, decoded, fin, opcode, masked, rsv1, 
 
     if not valid then
       -- On autobahntestsuite preffered way to handle invalid 
-      -- CLOSE is drop TCP connections
+      -- CLOSE for Server is drop TCP connections
 
       if self._state == 'WAIT_DATA' then
-        -- self._state = 'CLOSED'
-        -- self._sock:shutdown()
-        -- return cb(self, WSError_EOF(self._code, self._reason))
-        return protocol_error(self, self._code, self._reason, cb)
+        if self._masked then -- client send response
+          return protocol_error(self, self._code, self._reason, cb)
+        end
+        -- server shutdown connection
+        self._state = 'CLOSED'
+        self._sock:shutdown()
+        return cb(self, WSError_EOF(self._code, self._reason))
       end
 
       if self._state == 'WAIT_CLOSE' then

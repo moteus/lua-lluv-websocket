@@ -53,7 +53,7 @@ end
 function runTestCase(no, cb)
   local ws_uri = Autobahn.Server.runTestCase(URI, no, agent)
 
-  uv.ws{ssl = ctx, utf8 = true}
+  uv.ws{ssl = ctx, utf8 = true, auto_ping_response=true}
   :register(deflate)
   :connect(ws_uri, "echo", function(cli, err)
     if err then

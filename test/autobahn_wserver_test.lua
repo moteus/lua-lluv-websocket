@@ -1,6 +1,7 @@
-local uv        = require"lluv"
-local websocket = require"websocket"
-local Autobahn  = require"./autobahn"
+local uv        = require "lluv"
+local websocket = require "websocket"
+local Autobahn  = require "./autobahn"
+local deflate   = require "websocket.extensions.permessage-deflate"
 
 local ctx do
   local ok, ssl = pcall(require, "lluv.ssl")
@@ -78,6 +79,7 @@ function runTest(cb)
 
   local server = websocket.server.lluv.listen{
     ssl = ctx, utf8 = true, url = url, default = echo,
+    extensions = {deflate}, auto_ping_response = true,
     protocols = {echo = echo},
     -- logger = require "log".new(require"log.writer.stdout".new(),require"log.formatter.concat".new(' ')),
   }

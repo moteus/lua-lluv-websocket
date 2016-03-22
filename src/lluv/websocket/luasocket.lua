@@ -94,8 +94,14 @@ function WsSocket:receive(mode)
 
     if mode == '*r' then return unpack(frame) end
 
+    local opcode = frame[2]
+
+    if opcode == ws.PING or opcode == ws.PONG then
+      return frame[1], opcode, true
+    end
+
     if not self._opcode then
-      self._frame, self._opcode = {}, frame[2]
+      self._frame, self._opcode = {}, opcode
     end
 
     tappend(self._frame, frame[1])

@@ -174,7 +174,9 @@ function Listener:__init(opts)
 
   self._logger          = opts.logger or DummyLogger
 
-  sock = websocket.new{ssl = opts.ssl, utf8 = opts.utf8}
+  sock = websocket.new{ssl = opts.ssl, utf8 = opts.utf8,
+    extensions = opts.extensions, auto_ping_response = opts.auto_ping_response,
+  }
 
   local url = opts.url or ("ws://" .. (opts.interface or "*") .. ":" .. (opts.port or "80"))
 

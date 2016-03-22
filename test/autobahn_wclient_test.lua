@@ -1,6 +1,7 @@
 local uv        = require "lluv"
 local websocket = require "websocket"
 local Autobahn  = require "./autobahn"
+local deflate   = require "websocket.extensions.permessage-deflate"
 
 local ctx do
   local ok, ssl = pcall(require, "lluv.ssl")
@@ -12,7 +13,12 @@ local ctx do
   end
 end
 
-local Client = function() return websocket.client.lluv{ssl = ctx, utf8 = true} end
+local Client = function() return websocket.client.lluv{
+  ssl                = ctx,
+  utf8               = true,
+  extensions         = {deflate},
+  auto_ping_response = true,
+}end
 
 local URI           = arg[1] or "ws://127.0.0.1:9001"
 local reportDir     = "./reports/clients"

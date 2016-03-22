@@ -105,7 +105,7 @@ end
 
 local upgrade_request = function(req)
   local lines = {
-    string.format('GET %s HTTP/1.1', req.uri or ''),
+    string.format('GET %s HTTP/1.1', req.uri or '/'),
     'Host: ' .. req.host,
     'Upgrade: websocket',
     'Connection: Upgrade',
