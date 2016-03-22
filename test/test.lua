@@ -1,5 +1,4 @@
 local uwebsocket = require "lluv.websocket"
---[[
 local websocket  = require "websocket"
 local bit        = require "lluv.websocket.bit"
 
@@ -17,5 +16,4 @@ print("MASK:", v)
 print("AND :", a)
 print("CAND:", string.char(a))
 print("CMSK:", string.char(v))
---]]
 uwebsocket.__self_test()
