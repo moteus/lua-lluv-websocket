@@ -35,7 +35,7 @@ branches:
 before_install:
   - export CC=gcc
   # install Lua
-  - pip install --user hererocks
+  - pip install --user hererocks==0.5
   - hererocks here -r^ --$LUA
   - export PATH=$PATH:$PWD/here/bin
 
@@ -47,10 +47,6 @@ before_install:
   - luarocks show basexx    || luarocks install basexx
   - luarocks show lzlib     || luarocks install lzlib
   - if [ "$LUA" == "lua 5.1" ]; then
-      luarocks show bit32 || luarocks install bit32;
-    fi
-  # required for lua-websockets
-  - if [ "$LUA" == "lua 5.3" ]; then
       luarocks show bit32 || luarocks install bit32;
     fi
   - luarocks show lua-websockets-core || luarocks install lua-websockets-core --server=http://luarocks.org/dev --deps-mode=none
