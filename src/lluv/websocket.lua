@@ -1063,6 +1063,7 @@ function WSSocket:accept()
   local sock = WSSocket.new({
     protocols = self._protocols;
     utf8      = self._validator and self._validator.new();
+    auto_ping_response = self._auto_ping_response;
   }, cli)
 
   sock._extensions = self._extensions
