@@ -20,7 +20,11 @@ local Client = function() return socket.ws{ssl = ctx, utf8 = true, extensions = 
 
 local URI           = arg[1] or "ws://127.0.0.1:9001"
 local reportDir     = "./reports/clients"
-local agent         = "lluv.ws.luasocket"
+local agent       = string.format("lluv.ws.luasocket (%s / %s)",
+  jit and jit.version or _VERSION, 
+  URI:lower():match("^wss:") and "WSS" or "WS"
+)
+local agent         = ""
 local caseCount     = 0
 local currentCaseId = 0
 

@@ -22,7 +22,10 @@ local Client = function() return websocket.client.lluv{
 
 local URI           = arg[1] or "ws://127.0.0.1:9001"
 local reportDir     = "./reports/clients"
-local agent         = "websocket.client.lluv"
+local agent     = string.format("websocket.client.lluv (%s / %s)",
+  jit and jit.version or _VERSION, 
+  URI:lower():match("^wss:") and "WSS" or "WS"
+)
 local caseCount     = 0
 local currentCaseId = 0
 
