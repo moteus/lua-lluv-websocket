@@ -20,6 +20,10 @@ This library includes stream interface for lluv and lluv backend for [lua-websoc
  * Async client - done (not tested)
  * Sync client - done (not tested / use `websocket.sync` implementation not `lluv.wobsocket` one)
 
+## Autobahn|Testsuite
+ * [Server](http://moteus.github.io/websocket/autobahn/reports/servers/index.html)
+ * [Client](http://moteus.github.io/websocket/autobahn/reports/clients/index.html)
+
 ##Usage
 ### Echo client/server
 ```Lua
