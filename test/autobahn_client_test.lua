@@ -17,7 +17,7 @@ local URI           = arg[1] or "ws://127.0.0.1:9001"
 local reportDir     = "./reports/clients"
 local agent       = string.format("lluv-websocket (%s / %s)",
   jit and jit.version or _VERSION, 
-  url:lower():match("^wss:") and "WSS" or "WS"
+  URI:lower():match("^wss:") and "WSS" or "WS"
 )
 local caseCount     = 0
 local currentCaseId = 0

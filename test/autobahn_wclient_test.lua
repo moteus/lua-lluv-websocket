@@ -59,7 +59,7 @@ local function runTestCase(no, cb)
     print("Executing test case " .. no .. "/" .. caseCount)
   end)
 
-  cli:on_error(function(...)
+  cli:on_error(function(ws, ...)
     assert(cli == ws)
     cli = nil
     print("WS ERROR:", ...)

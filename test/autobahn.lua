@@ -44,6 +44,12 @@ local function printReport(name, t, dump)
   print("-------------")
 end
 
+local function encode(str)
+  return (string.gsub(str, "[ /)(-]", function(ch)
+    return string.format("%%%.2X", string.byte(ch))
+  end))
+end
+
 local Utils = {} do
 Utils.readFile  = readFile
 Utils.readJson  = readJson
@@ -114,11 +120,11 @@ function Server.getCaseCount(URI)
 end
 
 function Server.runTestCase(URI, no, agent)
-  return URI .. "/runCase?case=" .. no .. "&agent=" .. agent
+  return URI .. "/runCase?case=" .. no .. "&agent=" .. encode(agent)
 end
 
 function Server.updateReports(URI, agent)
-  return URI .. "/updateReports?agent=" .. agent
+  return URI .. "/updateReports?agent=" .. encode(agent)
 end
 
 end
