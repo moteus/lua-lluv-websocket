@@ -156,6 +156,7 @@ local WSSocket = ut.class() do
 -- HOST_SHUTDOWN we send CLOSE frame but client do not call close method 
 --          we wait response and stop read messages. But we still can read
 --          data frames.
+-- LISTEN - this is server socket so it does not do any WebSocket protocol
 --
 
 local function is_sock(s)
@@ -618,8 +619,9 @@ function WSSocket:close(code, reason, cb)
     return self:_close(true, code, reason, cb)
   end
 
-  -- we already send/recv CLOSE
-  if self._state == 'CLOSED' then
+  -- we already send/recv CLOSE or this is server socket so we do 
+  -- not need do any close handshake
+  if self._state == 'CLOSED' or self._state == 'LISTEN' then
     return self:_close(true, self._code, self._reason, cb)
   end
 
@@ -1114,6 +1116,8 @@ function WSSocket:accept()
 end
 
 function WSSocket:listen(cb)
+  self._state = 'LISTEN'
+
   local ok, err = self._sock:listen(function(_, ...)
     cb(self, ...)
   end)
