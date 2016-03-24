@@ -150,10 +150,13 @@ local WSSocket = ut.class() do
 -- CLOSED not connected or closed handshake
 -- WAIT_DATA data transfer mode
 -- WAIT_CLOSE client call close method and we wait timeout or response
+--    it different from HOST_SHUTDOWN because we can not do read.
 -- PEER_SHUTDOWN we recv CLOSE frame but client do not call close method 
 --          we do not send CLOSE yet. We do not read input any more
 -- HOST_SHUTDOWN we send CLOSE frame but client do not call close method 
---          we wait response and stop read messages.
+--          we wait response and stop read messages. But we still can read
+--          data frames.
+--
 
 local function is_sock(s)
   local ts = type(s)
@@ -378,7 +381,7 @@ function WSSocket:write(msg, opcode, fin, cb)
   msg, opcode, fin, cb = decode_write_args(msg, opcode, fin, cb)
 
   if self._state == 'HOST_SHUTDOWN' or self._state == 'CLOSED' then
-    if cb then uv.defer(cb, self, WSError_EOF(self._code, self._reason)) end
+    if cb then uv.defer(cb, self, WSError_EOF(self._code or 1006, self._reason or 'Wrong state')) end
     return
   end
 
@@ -632,9 +635,6 @@ function WSSocket:close(code, reason, cb)
     self:write(encoded, CLOSE, function()
       if self._state == 'PEER_SHUTDOWN' then
         return self:_close(true, self._code, self._reason, cb)
-      end
-      if self._state == 'WAIT_CLOSE' then
-        self._state = 'CLOSED'
       end
     end)
   end
