@@ -207,6 +207,28 @@ function WsSocket:__tostring()
   return "lluv.ws.luasocket (" .. tostring(self._sock) .. ")"
 end
 
+function WsSocket:close(code, reason)
+  if self._sock then
+    local terminated
+    local function fn(cli, clean, code, reason)
+      if trace then trace("CLOSE CB>", self, clean, code, reason) end
+      if terminated then return end
+      return self:_resume(clean, code, reason)
+    end;
+    if trace then trace("CLOSE>", self, code, reason, fn) end
+    self:_start("write")
+    self._sock:close(code, reason, fn)
+
+    local ok, code, reason = self:_yield()
+    terminated = true
+    self:_stop("write")
+
+    self._sock = nil
+
+    return ok, code, reason
+  end
+end
+
 end
 
 return {
