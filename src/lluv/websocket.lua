@@ -172,17 +172,17 @@ local function protocol_error(self, code, msg, read_cb, shutdown, read_err)
   local encoded = frame.encode_close(self._code, self._reason)
 
   if shutdown then -- no wait close response
-    self._state = 'CLOSED'
     self:_stop_read()
     self:write(encoded, CLOSE, function()
       if self._sock then self._sock:shutdown() end
     end)
+    self._state = 'CLOSED'
   else
     -- we call read callback so we have to prevent second call of read callback
     -- But we have to continue read to wait CLOSE response so we can not stop_read
     self._read_cb = nil
-    self._state = 'HOST_SHUTDOWN'
     self:write(encoded, CLOSE)
+    self._state = 'HOST_SHUTDOWN'
   end
 
   return read_cb and read_cb(self, read_err or WSError_EOF(self._code, self._reason))
@@ -376,6 +376,11 @@ end
 
 function WSSocket:write(msg, opcode, fin, cb)
   msg, opcode, fin, cb = decode_write_args(msg, opcode, fin, cb)
+
+  if self._state == 'HOST_SHUTDOWN' or self._state == 'CLOSED' then
+    if cb then uv.defer(cb, self, WSError_EOF(self._code, self._reason)) end
+    return
+  end
 
   local encoded
   if type(msg) == "table" then
@@ -599,8 +604,11 @@ function WSSocket:close(code, reason, cb)
     cb, reason = reason
   end
 
-  code   = code or 1000
-  reason = reason or ''
+  if self._state == 'PEER_SHUTDOWN' then
+    code, reason = code or self._code, reason or self._reason
+  end
+
+  code, reason = code or 1000, reason or ''
 
   -- not connected or no handshake
   if not self._ready then
@@ -1010,6 +1018,40 @@ function WSSocket:stop_read()
   if self._state ~= 'WAIT_DATA' then return end
 
   return self:_stop_read()
+end
+
+function WSSocket:shutdown(code, reason, cb)
+  if trace then trace('SHUTDOWN>', self._state) end
+
+  if not self._sock then return end
+
+  if not(
+       self._state == 'WAIT_DATA'
+    or self._state == 'PEER_SHUTDOWN'
+  ) then
+    return
+  end
+
+  if type(code) == 'function' then
+    cb, code, reason = code
+  elseif type(reason) == 'function' then
+    cb, reason = reason
+  end
+
+  if self._state == 'WAIT_DATA' then
+    self._code, self._reason = code or 1000, reason or ''
+  end
+
+  local encoded = frame.encode_close(self._code or 1000, self._reason or '')
+  self:write(encoded, CLOSE, function()
+    if self._sock then self._sock:shutdown(cb) end
+  end)
+
+  if self._state == 'PEER_SHUTDOWN' then
+    self._state = 'CLOSED'
+  elseif self._state == 'WAIT_CLOSE' then
+    self._state = 'HOST_SHUTDOWN'
+  end
 end
 
 function WSSocket:bind(url, protocols, cb)
