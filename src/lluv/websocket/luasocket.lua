@@ -208,7 +208,15 @@ function WsSocket:__tostring()
 end
 
 function WsSocket:close(code, reason)
-  if self._sock then
+  if not self._sock then return true end
+
+  -- we can support close from any thread only if we do not need do any IO
+  -- it possible for server socket.
+  -- for data socket we just close TCP but it is not correct WebSocket close
+  local clean
+  if (not self._accept_list) and (self._co == coroutine.running()) then
+    -- assume this is not server socket so we try 
+    -- do correct close handshake and wait until done
     local terminated
     local function fn(cli, clean, code, reason)
       if trace then trace("CLOSE CB>", self, clean, code, reason) end
@@ -219,14 +227,21 @@ function WsSocket:close(code, reason)
     self:_start("write")
     self._sock:close(code, reason, fn)
 
-    local ok, code, reason = self:_yield()
+    clean, code, reason = self:_yield()
     terminated = true
     self:_stop("write")
-
-    self._sock = nil
-
-    return ok, code, reason
+  else
+    -- this is server socket so we can just close socket
+    clean = not not self._accept_list
+    self._sock:close()
   end
+
+  -- clean up lluv.luasocket data
+  self._timer:close()
+
+  self._sock, self._timer = nil
+
+  return clean, code, reason
 end
 
 end
