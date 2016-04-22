@@ -49,6 +49,7 @@ before_install:
   - if [ "$LUA" == "lua 5.1" ]; then
       luarocks show bit32 || luarocks install bit32;
     fi
+  - luarocks show luasocket           || luarocks install luasocket
   - luarocks show lua-websockets-core || luarocks install lua-websockets-core --server=http://luarocks.org/dev --deps-mode=none
 
 install:
