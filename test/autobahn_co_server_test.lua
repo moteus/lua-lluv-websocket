@@ -111,6 +111,7 @@ function runTest(cb)
     end
 
     wstest({"-m" ,"fuzzingclient", "-s", "fuzzingclient.json"}, function(code, status)
+      -- server:interrupt('interrupted')
       server:close()
       uv.defer(cb, code, status)
     end)
@@ -121,6 +122,7 @@ function runTest(cb)
         on_connect(cli:attach())
       end) else
         print("Accept error:", proto)
+        break
       end
     end
 
