@@ -86,7 +86,7 @@ local base = SizedBuffer.__base
 
 function SizedBuffer:__init(buffer)
   assert(base.__init(self))
-  self._size = 0
+  self._size = self._size or 0
 
   while buffer do
     local chunk = buffer:read_some()
@@ -96,6 +96,8 @@ function SizedBuffer:__init(buffer)
 
   return self
 end
+
+if not SizedBuffer.size then
 
 function SizedBuffer:read_line(...)
   error('Unsupported method')
@@ -137,6 +139,8 @@ end
 
 function SizedBuffer:size()
   return self._size
+end
+
 end
 
 end
