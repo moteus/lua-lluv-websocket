@@ -74,7 +74,11 @@ local http_headers = function(request)
   local header, request = split.first(request, '\r\n')
 
   local headers = {}
-  if not header:match('.*HTTP/1%.1') then
+  local method, uri = string.match(header, '^(%S+)%s*(.-)%s*HTTP/1%.1')
+  if method then -- accept
+    headers['@method'] = method
+    headers['@uri'] = uri
+  elseif not string.match(header, '^%s*HTTP/1%.1') then
     return headers
   end
 
