@@ -193,7 +193,7 @@ elseif name == 'base64' then
   base64.decode = function(str) return base.decode(str) end
 end
 
-local DEFAULT_PORTS = {ws = 80, wss = 443}
+local DEFAULT_PORTS = {ws = 80, wss = 443, http = 80, https = 443}
 
 local parse_url = function(url)
   local protocol, address, uri = url:match('^(%w+)://([^/]+)(.*)$')
