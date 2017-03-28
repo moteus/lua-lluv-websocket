@@ -120,7 +120,8 @@ var BrowserDetect = {
 			subString: "Chrome",
 			identity: "Chrome"
 		},
-		{ 	string: navigator.userAgent,
+		{
+			string: navigator.userAgent,
 			subString: "OmniWeb",
 			versionSearch: "OmniWeb/",
 			identity: "OmniWeb"
@@ -173,7 +174,7 @@ var BrowserDetect = {
 			identity: "Mozilla",
 			versionSearch: "rv"
 		},
-		{ 		// for older Netscapes (4-)
+		{		// for older Netscapes (4-)
 			string: navigator.userAgent,
 			subString: "Mozilla",
 			identity: "Netscape",
@@ -219,12 +220,13 @@ function get_appropriate_ws_url()
 	 * We open the websocket encrypted if this page came on an
 	 * https:// url itself, otherwise unencrypted
 	 */
+	var base = "127.0.0.1:12345/ws/";
 
 	if (u.substring(0, 5) == "https") {
-		return "wss://localhost:12345";
-	} else {
-		return "ws://localhost:12345";
+		return "wss://" + base;
 	}
+
+	return "ws://" + base;
 }
 
 
@@ -239,7 +241,8 @@ document.getElementById("number").textContent = get_appropriate_ws_url();
 				   "dumb-increment-protocol");
 	} else {
 		socket_di = new WebSocket(get_appropriate_ws_url(),
-				   "dumb-increment-protocol");
+				"dumb-increment-protocol"
+		);
 	}
 
 

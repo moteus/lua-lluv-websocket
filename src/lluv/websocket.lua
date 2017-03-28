@@ -276,6 +276,10 @@ function WSSocket:connect(url, proto, cb)
 
   local protocol, host, port, uri = tools.parse_url(url)
 
+  -- to support http proxy
+  if protocol == 'http'  then protocol = 'ws' end
+  if protocol == 'https' then protocol = 'wss' end
+
   if protocol ~= 'ws' and protocol ~= 'wss'  then
     return uv.defer(cb, self, WSError_ENOSUP("bad protocol - " .. protocol))
   end
