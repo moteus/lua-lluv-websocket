@@ -8,6 +8,7 @@ local ERRORS = {
   [-2] = "EOF";
   [-3] = "ESTATE";
   [-4] = "ENOSUP";
+  [-5] = "EOVERFLOW";
 }
 
 for k, v in pairs(ERRORS) do WSError[v] = k end
@@ -66,9 +67,14 @@ local function WSError_ENOSUP(msg)
   return WSError.new(WSError.ENOSUP, nil, msg)
 end
 
+local function WSError_EOVERFLOW(msg)
+  return WSError.new(WSError.EOVERFLOW, nil, msg, 1011, 'internal error')
+end
+
 return setmetatable({
   raise_handshake_faild = WSError_handshake_faild;
   raise_EOF             = WSError_EOF;
   raise_ESTATE          = WSError_ESTATE;
   raise_ENOSUP          = WSError_ENOSUP;
+  raise_EOVERFLOW       = WSError_EOVERFLOW;
 }, {__index = WSError})

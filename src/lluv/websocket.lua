@@ -33,6 +33,7 @@ local WSError_handshake_faild = WSError.raise_handshake_faild
 local WSError_EOF             = WSError.raise_EOF
 local WSError_ESTATE          = WSError.raise_ESTATE
 local WSError_ENOSUP          = WSError.raise_ENOSUP
+local WSError_EOVERFLOW       = WSError.raise_EOVERFLOW
 
 local CONTINUATION = frame.CONTINUATION
 local TEXT         = frame.TEXT
@@ -215,6 +216,7 @@ function WSSocket:__init(opt, s)
   self._last_rsv2  = nil
   self._last_rsv3  = nil
   self._auto_ping_response = opt.auto_ping_response
+  self._max_buffer_size    = opt.max_buffer_size
 
   if opt.extensions then
     for _, ext in ipairs(opt.extensions) do
@@ -465,7 +467,14 @@ function WSSocket:_client_handshake(key, req, cb)
 
     buffer:append(data)
     local response = buffer:read("*l")
-    if not response then return end
+    if not response then
+      if self._max_buffer_size and (buffer:size() > self._max_buffer_size) then
+        sock:stop_read()
+        err = WSError_EOVERFLOW('buffer overflow on client handshake')
+        protocol_error(self, 1011, "Internal error", cb, true, err)
+      end
+      return
+    end
     sock:stop_read()
 
     if trace then trace("WS HS >", "stop read") end
@@ -528,7 +537,16 @@ function WSSocket:_server_handshake(cb)
 
     buffer:append(data)
     local request = buffer:read("*l")
-    if not request then return end
+    if not request then
+      if self._max_buffer_size and  (buffer:size() > self._max_buffer_size) then
+        self._state = 'FAILED'
+        self._sock:stop_read():shutdown()
+        err = WSError_EOVERFLOW('buffer overflow on server handshake')
+        return cb(self, err)
+      end
+      return
+    end
+    sock:stop_read()
 
     if trace then trace("RX>", "HANDSHAKE", text(request)) end
     if trace then
@@ -536,8 +554,6 @@ function WSSocket:_server_handshake(cb)
       buffer:append(msg)
       trace("HANDSHAKE ADDITIONAL DATA:", hex(msg))
     end
-
-    sock:stop_read()
 
     request = request .. '\r\n'
 
@@ -969,6 +985,9 @@ function WSSocket:_start_read(mode, cb)
     if data then
       if trace then trace("WS RAW RX>", self._state, cb, self._buffer:size(), self._wait_size, hex(data)) end
       self._buffer:append(data)
+      if self._max_buffer_size and (self._buffer:size() > self._max_buffer_size) then
+        err = WSError_EOVERFLOW('buffer overflow')
+      end
     end
 
     if trace and err then trace("WS RAW RX>", self._state, cb, err) end
@@ -1116,6 +1135,7 @@ function WSSocket:accept()
     protocols = self._protocols;
     utf8      = self._validator and self._validator.new();
     auto_ping_response = self._auto_ping_response;
+    max_buffer_size = self._max_buffer_size;
   }, cli)
 
   sock._extensions = self._extensions
