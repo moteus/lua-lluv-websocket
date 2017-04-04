@@ -24,7 +24,7 @@ This library includes stream interface for lluv and lluv backend for [lua-websoc
  * [Server](http://moteus.github.io/websocket/autobahn/reports/servers/index.html)
  * [Client](http://moteus.github.io/websocket/autobahn/reports/clients/index.html)
 
-##Usage
+## Usage
 ### Echo client/server
 ```Lua
 local uv  = require"lluv"
